@@ -746,7 +746,11 @@ func printRLECompressedPixels(ctx *ctx_type, d []byte) {
 
 		if !rlectx.rowHeaderPrinted {
 			startLine(ctx, int64(pos))
-			ctx.printf("row %d:", ypos)
+			if ypos >= 0 {
+				ctx.printf("row %d:", ypos)
+			} else {
+				ctx.printf("row n/a:")
+			}
 			rlectx.rowHeaderPrinted = true
 		}
 
@@ -773,9 +777,19 @@ func printRLECompressedPixels(ctx *ctx_type, d []byte) {
 					ctx.printf("%x", b1&0x0f)
 					unc_pixels_left--
 				}
-				if unc_pixels_left == 0 {
-					ctx.printf("}")
+			} else { // RLE8
+				ctx.printf("%02x", b1)
+				unc_pixels_left--
+				if unc_pixels_left > 0 {
+					ctx.printf(" %02x", b2)
+					unc_pixels_left--
 				}
+				if unc_pixels_left > 0 {
+					ctx.printf(" ")
+				}
+			}
+			if unc_pixels_left == 0 {
+				ctx.printf("}")
 			}
 		} else if deltaFlag {
 			ctx.printf("(%v,%v)", b1, b2)
@@ -816,12 +830,11 @@ func printRLECompressedPixels(ctx *ctx_type, d []byte) {
 				} else {
 					ctx.printf(" %v{%x%x}", b1, n1, n2)
 				}
+			} else { // RLE8
+				ctx.printf(" %v{%02x}", b1, b2)
 			}
 		}
 	}
-
-	startLine(ctx, int64(pos))
-	ctx.printf("(Compressed data size: %v)\n", pos)
 
 	startLine(ctx, int64(pos))
 	var ratio float64
