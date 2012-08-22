@@ -681,6 +681,120 @@ func printRow(ctx *ctx_type, rowPhysical int64, rowLogical int64, d []byte) {
 	ctx.print("\n")
 }
 
+func printUncompressedPixels(ctx *ctx_type, d []byte) {
+	var rowPhysical int64
+	var rowLogical int64
+	for rowPhysical = 0; rowPhysical < int64(ctx.imgHeight); rowPhysical++ {
+		if ctx.topDown {
+			rowLogical = rowPhysical
+		} else {
+			rowLogical = int64(ctx.imgHeight) - 1 - rowPhysical
+		}
+
+		printRow(ctx, rowPhysical, rowLogical, d)
+	}
+}
+
+func printRLECompressedPixels(ctx *ctx_type, d []byte) {
+	if ctx.bitCount!=4 && ctx.bitCount!=8 {
+		return
+	}
+	if ctx.bitCount==4 && ctx.compression!=bI_RLE4 {
+		return
+	}
+	if ctx.bitCount==8 && ctx.compression!=bI_RLE8 {
+		return
+	}
+
+	var pos int = 0 // current position in d[]
+	var xpos, ypos int
+	var unc_pixels_left = 0
+	var b1, b2 byte
+	var deltaFlag bool
+	var rowHeaderPrinted bool
+
+	xpos = 0
+	// RLE-compressed BMPs are not allowed to be top-down.
+	ypos = ctx.imgHeight - 1
+
+	for {
+		if pos+1 >= len(d) {
+			break
+		}
+
+		if !rowHeaderPrinted {
+			startLine(ctx,int64(pos))
+			ctx.printf("row %d:",ypos)
+			rowHeaderPrinted = true
+		}
+
+		// Read bytes 2 at a time
+		b1 = d[pos]
+		b2 = d[pos+1]
+		pos += 2
+
+		if unc_pixels_left>0 {
+			if ctx.compression==bI_RLE4 {
+				// The two bytes we read store up to 4 uncompressed pixels.
+				ctx.printf("%x",(b1&0xf0)>>4)
+				unc_pixels_left--
+				if unc_pixels_left>0 {
+					ctx.printf("%x",b1&0x0f)
+					unc_pixels_left--
+				}
+				if unc_pixels_left>0 {
+					ctx.printf("%x",(b2&0xf0)>>4)
+					unc_pixels_left--
+				}
+				if unc_pixels_left>0 {
+					ctx.printf("%x",b1&0x0f)
+					unc_pixels_left--
+				}
+				if unc_pixels_left==0 {
+					ctx.printf("}")
+				}
+			}
+		} else if deltaFlag {
+			ctx.printf("(%v,%v)",b1,b2)
+			xpos+=int(b1)
+			ypos-=int(b2)
+			if b2>0 {
+				rowHeaderPrinted = false
+			}
+			deltaFlag = false
+		} else if b1==0 {
+			if b2==0 {
+				ctx.printf(" EOL\n")
+				ypos--
+				xpos=0
+				rowHeaderPrinted = false
+			} else if b2==1 {
+				ctx.printf(" EOBMP\n")
+				break
+			} else if b2==2 {
+				ctx.printf(" DELTA")
+				deltaFlag = true
+			} else {
+				// An upcoming uncompressed run of b2 pixels
+				ctx.printf(" u%v{",b2)
+				unc_pixels_left = int(b2)
+			}
+		} else { // Compressed pixels
+			if ctx.compression==bI_RLE4 {
+				var n1 byte = (b2&0xf0)>>4
+				var n2 byte = b2&0x0f
+				if b1==1 {
+					ctx.printf(" %v{%x}",b1,n1)
+				} else if n1==n2 {
+					ctx.printf(" %v{%x}",b1,n1)
+				} else {
+					ctx.printf(" %v{%x%x}",b1,n1,n2)
+				}
+			}
+		}
+	}
+}
+
 func inspectBits(ctx *ctx_type, d []byte) error {
 	var calculatedSize int64
 
@@ -714,28 +828,24 @@ func inspectBits(ctx *ctx_type, d []byte) error {
 
 	if !ctx.printPixels {
 		printPixels = false
-	} else if ctx.isCompressed {
-		// TODO: Support RLE-compressed images
-		printPixels = false
-	} else if ctx.rowStride < 1 || ctx.rowStride > 1000000 {
-		printPixels = false
-	} else if int64(len(d)) < calculatedSize {
-		printPixels = false
+	}
+
+	if !ctx.isCompressed {
+		if ctx.rowStride < 1 || ctx.rowStride > 1000000 {
+			printPixels = false
+		} else if int64(len(d)) < calculatedSize {
+			printPixels = false
+		}
 	}
 
 	if printPixels {
-		var rowPhysical int64
-		var rowLogical int64
-		for rowPhysical = 0; rowPhysical < int64(ctx.imgHeight); rowPhysical++ {
-			if ctx.topDown {
-				rowLogical = rowPhysical
-			} else {
-				rowLogical = int64(ctx.imgHeight) - 1 - rowPhysical
+		if ctx.isCompressed {
+			if ctx.compression==bI_RLE4 || ctx.compression==bI_RLE8 {
+				printRLECompressedPixels(ctx, d)
 			}
-
-			printRow(ctx, rowPhysical, rowLogical, d)
+		} else {
+			printUncompressedPixels(ctx, d)
 		}
-
 	}
 
 	return nil
