@@ -776,7 +776,7 @@ func printRLECompressedPixels(ctx *ctx_type, d []byte) {
 					unc_pixels_left--
 				}
 				if unc_pixels_left > 0 {
-					ctx.printf("%x", b1&0x0f)
+					ctx.printf("%x", b2&0x0f)
 					unc_pixels_left--
 				}
 			} else { // RLE8
