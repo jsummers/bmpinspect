@@ -87,6 +87,8 @@ type ctx_type struct {
 	calculatedSize int64
 
 	actualBitsSize int64 // 0 = unknown
+
+	fieldNamePrefix string
 }
 
 // A wrapper for fmt.Printf.
@@ -105,6 +107,13 @@ func startLineAbsolute(ctx *ctx_type, pos int64) {
 
 func startLine(ctx *ctx_type, offset int64) {
 	startLineAbsolute(ctx, ctx.pos+offset)
+}
+
+// Start a new line, and print the "bi" (etc.) field name prefix.
+func (ctx *ctx_type) pfxPrintf(offset int64, format string, a ...interface{}) {
+	startLine(ctx, offset)
+	ctx.print(ctx.fieldNamePrefix)
+	ctx.printf(format, a...)
 }
 
 func getDWORD(ctx *ctx_type, d []byte) uint32 {
@@ -177,22 +186,18 @@ func inspectFileheader(ctx *ctx_type, d []byte) error {
 func inspectInfoheaderV2(ctx *ctx_type, d []byte) error {
 
 	bcWidth := getWORD(ctx, d[4:6])
-	startLine(ctx, 4)
-	ctx.printf("bcWidth: %v\n", bcWidth)
+	ctx.pfxPrintf(4, "Width: %v\n", bcWidth)
 	ctx.imgWidth = int(bcWidth)
 
 	bcHeight := getWORD(ctx, d[6:8])
-	startLine(ctx, 6)
-	ctx.printf("bcHeight: %v\n", bcHeight)
+	ctx.pfxPrintf(6, "Height: %v\n", bcHeight)
 	ctx.imgHeight = int(bcHeight)
 
 	bcPlanes := getWORD(ctx, d[8:10])
-	startLine(ctx, 8)
-	ctx.printf("bcPlanes: %v\n", bcPlanes)
+	ctx.pfxPrintf(8, "Planes: %v\n", bcPlanes)
 
 	bcBitCount := getWORD(ctx, d[10:12])
-	startLine(ctx, 10)
-	ctx.printf("bcBitCount: %v\n", bcBitCount)
+	ctx.pfxPrintf(10, "BitCount: %v\n", bcBitCount)
 	ctx.bitCount = int(bcBitCount)
 
 	ctx.palBytesPerEntry = 3
@@ -212,27 +217,14 @@ func printDotsPerMeter(ctx *ctx_type, n int32) {
 }
 
 func inspectInfoheaderV3(ctx *ctx_type, d []byte) error {
-
-	var prefix string
 	var ok bool
 
-	switch ctx.bmpVer {
-	case 3:
-		prefix = "bi"
-	case 4:
-		prefix = "bV4"
-	case 5:
-		prefix = "bV5"
-	}
-
 	biWidth := getLONG(ctx, d[4:8])
-	startLine(ctx, 4)
-	ctx.printf("%vWidth: %v\n", prefix, biWidth)
+	ctx.pfxPrintf(4, "Width: %v\n", biWidth)
 	ctx.imgWidth = int(biWidth)
 
 	biHeight := getLONG(ctx, d[8:12])
-	startLine(ctx, 8)
-	ctx.printf("%vHeight: %v\n", prefix, biHeight)
+	ctx.pfxPrintf(8, "Height: %v\n", biHeight)
 	if biHeight < 0 {
 		ctx.topDown = true
 		ctx.imgHeight = int(-biHeight)
@@ -241,20 +233,17 @@ func inspectInfoheaderV3(ctx *ctx_type, d []byte) error {
 	}
 
 	biPlanes := getWORD(ctx, d[12:14])
-	startLine(ctx, 12)
-	ctx.printf("%vPlanes: %v\n", prefix, biPlanes)
+	ctx.pfxPrintf(12, "Planes: %v\n", biPlanes)
 	if biPlanes != 1 {
 		ctx.print("Warning: Planes is required to be 1\n")
 	}
 
 	biBitCount := getWORD(ctx, d[14:16])
-	startLine(ctx, 14)
-	ctx.printf("%vBitCount: %v\n", prefix, biBitCount)
+	ctx.pfxPrintf(14, "BitCount: %v\n", biBitCount)
 	ctx.bitCount = int(biBitCount)
 
 	ctx.compression = getDWORD(ctx, d[16:20])
-	startLine(ctx, 16)
-	ctx.printf("%vCompression: %v", prefix, ctx.compression)
+	ctx.pfxPrintf(16, "Compression: %v", ctx.compression)
 	var cmprName string
 	cmprName, ok = cmprNames[ctx.compression]
 	if !ok {
@@ -270,29 +259,24 @@ func inspectInfoheaderV3(ctx *ctx_type, d []byte) error {
 	}
 
 	ctx.sizeImage = getDWORD(ctx, d[20:24])
-	startLine(ctx, 20)
-	ctx.printf("%vSizeImage: %v\n", prefix, ctx.sizeImage)
+	ctx.pfxPrintf(20, "SizeImage: %v\n", ctx.sizeImage)
 	if ctx.sizeImage == 0 && ctx.isCompressed {
 		ctx.print("Warning: SizeImage is required for compressed images\n")
 	}
 
 	biXPelsPerMeter := getLONG(ctx, d[24:28])
-	startLine(ctx, 24)
-	ctx.printf("%vXPelsPerMeter: ", prefix)
+	ctx.pfxPrintf(24, "XPelsPerMeter: ")
 	printDotsPerMeter(ctx, biXPelsPerMeter)
 
 	biYPelsPerMeter := getLONG(ctx, d[28:32])
-	startLine(ctx, 28)
-	ctx.printf("%vYPelsPerMeter: ", prefix)
+	ctx.pfxPrintf(28, "YPelsPerMeter: ")
 	printDotsPerMeter(ctx, biYPelsPerMeter)
 
 	biClrUsed := getDWORD(ctx, d[32:36])
-	startLine(ctx, 32)
-	ctx.printf("%vClrUsed: %v\n", prefix, biClrUsed)
+	ctx.pfxPrintf(32, "ClrUsed: %v\n", biClrUsed)
 
 	biClrImportant := getDWORD(ctx, d[36:40])
-	startLine(ctx, 36)
-	ctx.printf("%vClrImportant: %v\n", prefix, biClrImportant)
+	ctx.pfxPrintf(36, "ClrImportant: %v\n", biClrImportant)
 
 	if biClrUsed > 100000 {
 		return errors.New("Unreasonable color table size")
@@ -320,15 +304,10 @@ func formatCIEXYZ(ctx *ctx_type, d []byte) string {
 	return fmt.Sprintf("X:%.8f Y:%.8f Z:%.8f", x, y, z)
 }
 
-func inspectCIEXYZTRIPLE(ctx *ctx_type, d []byte, offset int64, prefix string) {
-	startLine(ctx, offset)
-	ctx.printf("%sEndpoints: Red:   %s\n", prefix, formatCIEXYZ(ctx, d[0:12]))
-
-	startLine(ctx, offset+12)
-	ctx.printf("%sEndpoints: Green: %s\n", prefix, formatCIEXYZ(ctx, d[12:24]))
-
-	startLine(ctx, offset+24)
-	ctx.printf("%sEndpoints: Blue:  %s\n", prefix, formatCIEXYZ(ctx, d[24:36]))
+func inspectCIEXYZTRIPLE(ctx *ctx_type, d []byte, offset int64) {
+	ctx.pfxPrintf(offset, "Endpoints: Red:   %s\n", formatCIEXYZ(ctx, d[0:12]))
+	ctx.pfxPrintf(offset+12, "Endpoints: Green: %s\n", formatCIEXYZ(ctx, d[12:24]))
+	ctx.pfxPrintf(offset+24, "Endpoints: Blue:  %s\n", formatCIEXYZ(ctx, d[24:36]))
 }
 
 func csTypeIsValid(ctx *ctx_type, csType uint32) bool {
@@ -348,16 +327,8 @@ func csTypeIsValid(ctx *ctx_type, csType uint32) bool {
 
 func inspectInfoheaderV4(ctx *ctx_type, d []byte) error {
 	var err error
-	var prefix string
 	var ok bool
 	var name string
-
-	switch ctx.bmpVer {
-	case 4:
-		prefix = "bV4"
-	case 5:
-		prefix = "bV5"
-	}
 
 	err = inspectInfoheaderV3(ctx, d[0:40])
 	if err != nil {
@@ -365,21 +336,16 @@ func inspectInfoheaderV4(ctx *ctx_type, d []byte) error {
 	}
 
 	redMask := getDWORD(ctx, d[40:44])
-	startLine(ctx, 40)
-	ctx.printf("%vRedMask:   %032b\n", prefix, redMask)
+	ctx.pfxPrintf(40, "RedMask:   %032b\n", redMask)
 	greenMask := getDWORD(ctx, d[44:48])
-	startLine(ctx, 44)
-	ctx.printf("%vGreenMask: %032b\n", prefix, greenMask)
+	ctx.pfxPrintf(44, "GreenMask: %032b\n", greenMask)
 	blueMask := getDWORD(ctx, d[48:52])
-	startLine(ctx, 48)
-	ctx.printf("%vBlueMask:  %032b\n", prefix, blueMask)
+	ctx.pfxPrintf(48, "BlueMask:  %032b\n", blueMask)
 	alphaMask := getDWORD(ctx, d[52:56])
-	startLine(ctx, 52)
-	ctx.printf("%vAlphaMask: %032b\n", prefix, alphaMask)
+	ctx.pfxPrintf(52, "AlphaMask: %032b\n", alphaMask)
 
 	csType := getDWORD(ctx, d[56:60])
-	startLine(ctx, 52)
-	ctx.printf("%vCSType: 0x%x", prefix, csType)
+	ctx.pfxPrintf(56, "CSType: 0x%x", csType)
 	name, ok = csTypeNames[csType]
 	if ok {
 		ctx.printf(" = %s", name)
@@ -389,30 +355,24 @@ func inspectInfoheaderV4(ctx *ctx_type, d []byte) error {
 	}
 	ctx.print("\n")
 
-	inspectCIEXYZTRIPLE(ctx, d[60:96], 60, prefix)
+	inspectCIEXYZTRIPLE(ctx, d[60:96], 60)
 
 	gammaRed := getFloat16dot16(ctx, d[96:100])
-	startLine(ctx, 96)
-	ctx.printf("%vGammaRed:   %.6f\n", prefix, gammaRed)
+	ctx.pfxPrintf(96, "GammaRed:   %.6f\n", gammaRed)
 
 	gammaGreen := getFloat16dot16(ctx, d[100:104])
-	startLine(ctx, 100)
-	ctx.printf("%vGammaGreen: %.6f\n", prefix, gammaGreen)
+	ctx.pfxPrintf(100, "GammaGreen: %.6f\n", gammaGreen)
 
 	gammaBlue := getFloat16dot16(ctx, d[104:108])
-	startLine(ctx, 104)
-	ctx.printf("%vGammaBlue:  %.6f\n", prefix, gammaBlue)
+	ctx.pfxPrintf(104, "GammaBlue:  %.6f\n", gammaBlue)
 
 	return nil
 }
 
 func inspectInfoheaderV5(ctx *ctx_type, d []byte) error {
 	var err error
-	var prefix string
 	var ok bool
 	var name string
-
-	prefix = "bV5"
 
 	err = inspectInfoheaderV4(ctx, d[0:108])
 	if err != nil {
@@ -420,8 +380,7 @@ func inspectInfoheaderV5(ctx *ctx_type, d []byte) error {
 	}
 
 	intent := getDWORD(ctx, d[108:112])
-	startLine(ctx, 108)
-	ctx.printf("%vIntent: %v", prefix, intent)
+	ctx.pfxPrintf(108, "Intent: %v", intent)
 	name, ok = intentNames[intent]
 	if ok {
 		ctx.printf(" = %s", name)
@@ -429,16 +388,13 @@ func inspectInfoheaderV5(ctx *ctx_type, d []byte) error {
 	ctx.print("\n")
 
 	profileData := getDWORD(ctx, d[112:116])
-	startLine(ctx, 112)
-	ctx.printf("%vProfileData: %v\n", prefix, profileData)
+	ctx.pfxPrintf(112, "ProfileData: %v\n", profileData)
 
 	profileSize := getDWORD(ctx, d[116:120])
-	startLine(ctx, 116)
-	ctx.printf("%vProfileSize: %v\n", prefix, profileSize)
+	ctx.pfxPrintf(116, "ProfileSize: %v\n", profileSize)
 
 	reserved := getDWORD(ctx, d[120:124])
-	startLine(ctx, 120)
-	ctx.printf("%vReserved: %v\n", prefix, reserved)
+	ctx.pfxPrintf(120, "Reserved: %v\n", reserved)
 
 	return nil
 }
@@ -554,12 +510,16 @@ func readInfoheader(ctx *ctx_type) error {
 	switch ctx.infoHeaderSize {
 	case 12:
 		ctx.bmpVer = 2
+		ctx.fieldNamePrefix = "bc"
 	case 40:
 		ctx.bmpVer = 3
+		ctx.fieldNamePrefix = "bi"
 	case 108:
 		ctx.bmpVer = 4
+		ctx.fieldNamePrefix = "bV4"
 	case 124:
 		ctx.bmpVer = 5
+		ctx.fieldNamePrefix = "bV5"
 	}
 
 	switch ctx.bmpVer {
