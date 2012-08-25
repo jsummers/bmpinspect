@@ -662,34 +662,29 @@ func printRow_32(ctx *ctx_type, d []byte) {
 	}
 }
 
-func printRow(ctx *ctx_type, rowPhysical int64, rowLogical int64, d []byte) {
-	var offset int64
+type printRowFuncType func(ctx *ctx_type, d []byte)
 
-	offset = rowPhysical * ctx.rowStride
-	startLine(ctx, offset)
-	ctx.printf("row %d:", rowLogical)
-
-	switch ctx.bitCount {
-	case 1:
-		printRow_1(ctx, d[offset:offset+ctx.rowStride])
-	case 4:
-		printRow_4(ctx, d[offset:offset+ctx.rowStride])
-	case 8:
-		printRow_8(ctx, d[offset:offset+ctx.rowStride])
-	case 16:
-		printRow_16(ctx, d[offset:offset+ctx.rowStride])
-	case 24:
-		printRow_24(ctx, d[offset:offset+ctx.rowStride])
-	case 32:
-		printRow_32(ctx, d[offset:offset+ctx.rowStride])
-	}
-
-	ctx.print("\n")
+var printRowFuncs = map[int]printRowFuncType{
+	1:  printRow_1,
+	4:  printRow_4,
+	8:  printRow_8,
+	16: printRow_16,
+	24: printRow_24,
+	32: printRow_32,
 }
 
 func printUncompressedPixels(ctx *ctx_type, d []byte) {
 	var rowPhysical int64
 	var rowLogical int64
+	var offset int64
+	var pR printRowFuncType
+
+	// Select a low-level "print row" function.
+	pR = printRowFuncs[ctx.bitCount]
+	if pR == nil {
+		return
+	}
+
 	for rowPhysical = 0; rowPhysical < int64(ctx.imgHeight); rowPhysical++ {
 		if ctx.topDown {
 			rowLogical = rowPhysical
@@ -697,7 +692,11 @@ func printUncompressedPixels(ctx *ctx_type, d []byte) {
 			rowLogical = int64(ctx.imgHeight) - 1 - rowPhysical
 		}
 
-		printRow(ctx, rowPhysical, rowLogical, d)
+		offset = rowPhysical * ctx.rowStride
+		startLine(ctx, offset)
+		ctx.printf("row %d:", rowLogical)
+		pR(ctx, d[offset:offset+ctx.rowStride])
+		ctx.print("\n")
 	}
 }
 
