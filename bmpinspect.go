@@ -85,6 +85,8 @@ type ctx_type struct {
 	// there would be if the image were not compressed).
 	rowStride      int64
 	calculatedSize int64
+
+	actualBitsSize int64 // 0 = unknown
 }
 
 // A wrapper for fmt.Printf.
@@ -836,10 +838,12 @@ func printRLECompressedPixels(ctx *ctx_type, d []byte) {
 		}
 	}
 
+	ctx.actualBitsSize = int64(pos)
 	startLine(ctx, int64(pos))
 	var ratio float64
-	ratio = float64(pos) / float64(ctx.calculatedSize)
-	ctx.printf("(Compression ratio: %v/%v = %.2f%%)\n", pos, ctx.calculatedSize, ratio*100.0)
+	ratio = float64(ctx.actualBitsSize) / float64(ctx.calculatedSize)
+	ctx.printf("(Compression ratio: %v/%v = %.2f%%)\n", ctx.actualBitsSize,
+		ctx.calculatedSize, ratio*100.0)
 }
 
 func inspectBits(ctx *ctx_type, d []byte) error {
@@ -862,6 +866,7 @@ func inspectBits(ctx *ctx_type, d []byte) error {
 		ctx.print("n/a)\n")
 	} else {
 		// An uncompressed image
+		ctx.actualBitsSize = ctx.calculatedSize
 		ctx.printf("%v)\n", ctx.calculatedSize)
 	}
 
@@ -955,6 +960,17 @@ func readBmp(ctx *ctx_type) error {
 
 	// Assume the rest of the file contains the bitmap bits
 	err = inspectBits(ctx, ctx.data[ctx.pos:ctx.fileSize])
+	if err != nil {
+		return err
+	}
+
+	if ctx.actualBitsSize > 0 {
+		ctx.pos += ctx.actualBitsSize
+		if ctx.pos < ctx.fileSize {
+			startLineAbsolute(ctx, ctx.pos)
+			ctx.printf("----- %v unused bytes -----\n", ctx.fileSize-ctx.pos)
+		}
+	}
 	return nil
 }
 
