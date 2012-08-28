@@ -116,24 +116,19 @@ func (ctx *ctx_type) pfxPrintf(offset int64, format string, a ...interface{}) {
 	ctx.printf(format, a...)
 }
 
+// DWORD is an unsigned 32-bit little-endian integer.
 func getDWORD(ctx *ctx_type, d []byte) uint32 {
 	return binary.LittleEndian.Uint32(d[0:4])
 }
 
+// WORD is an unsigned 16-bit little-endian integer.
 func getWORD(ctx *ctx_type, d []byte) uint16 {
 	return binary.LittleEndian.Uint16(d[0:2])
 }
 
+// LONG is a signed 32-bit little-endian integer.
 func getLONG(ctx *ctx_type, d []byte) int32 {
-	// TODO: There's gotta be a better way.
-	// Could use encoding/binary.Read(), but that's inconvenient because
-	// we're not using an io.Reader.
-	var tmp int64
-	tmp = int64(getDWORD(ctx, d))
-	if tmp > 0x7fffffff {
-		tmp -= 0x100000000
-	}
-	return int32(tmp)
+	return int32(getDWORD(ctx, d))
 }
 
 func getFloat16dot16(ctx *ctx_type, d []byte) float64 {
