@@ -54,6 +54,22 @@ var intentNames = map[uint32]string{
 	8: "LCS_GM_ABS_COLORIMETRIC",
 }
 
+type versionInfo_type struct {
+	number                int
+	prefix                string
+	name                  string
+	inspectInfoheaderFunc func(ctx *ctx_type, d []byte) error
+}
+
+// Information about the different BMP versions, keyed off of the number of
+// bytes in the InfoHeader.
+var versionInfo = map[uint32]versionInfo_type{
+	12:  {2, "bc", "OS/2-style", inspectInfoheaderV2},
+	40:  {3, "bi", "version 3", inspectInfoheaderV3},
+	108: {4, "bV4", "version 4", inspectInfoheaderV4},
+	124: {5, "bV5", "version 5", inspectInfoheaderV5},
+}
+
 type ctx_type struct {
 	fileName string
 	data     []byte
@@ -496,50 +512,30 @@ func readInfoheader(ctx *ctx_type) error {
 	// Read the "biSize" field, which tells us the BMP version.
 	ctx.infoHeaderSize = getDWORD(ctx, ctx.data[ctx.pos:ctx.pos+4])
 	startLine(ctx, 0)
-	ctx.printf("(bc|bi|bV4|bV5)Size: %v\n", ctx.infoHeaderSize)
+	ctx.printf("(bc|bi|bV4|bV5)Size: %v", ctx.infoHeaderSize)
+
+	var vi versionInfo_type
+	var knownVersion bool
+	vi, knownVersion = versionInfo[ctx.infoHeaderSize]
+	if knownVersion {
+		ctx.printf(" (%s)", vi.name)
+	}
+	ctx.printf("\n")
 
 	if ctx.fileSize-ctx.pos < int64(ctx.infoHeaderSize) {
 		return errors.New("Unexpected end of file")
 	}
 
-	switch ctx.infoHeaderSize {
-	case 12:
-		ctx.bmpVer = 2
-		ctx.fieldNamePrefix = "bc"
-	case 40:
-		ctx.bmpVer = 3
-		ctx.fieldNamePrefix = "bi"
-	case 108:
-		ctx.bmpVer = 4
-		ctx.fieldNamePrefix = "bV4"
-	case 124:
-		ctx.bmpVer = 5
-		ctx.fieldNamePrefix = "bV5"
+	if !knownVersion {
+		return errors.New("Unsupported BMP version")
 	}
 
-	switch ctx.bmpVer {
-	case 2:
-		err = inspectInfoheaderV2(ctx, ctx.data[ctx.pos:ctx.pos+int64(ctx.infoHeaderSize)])
-		if err != nil {
-			return err
-		}
-	case 3:
-		err = inspectInfoheaderV3(ctx, ctx.data[ctx.pos:ctx.pos+int64(ctx.infoHeaderSize)])
-		if err != nil {
-			return err
-		}
-	case 4:
-		err = inspectInfoheaderV4(ctx, ctx.data[ctx.pos:ctx.pos+int64(ctx.infoHeaderSize)])
-		if err != nil {
-			return err
-		}
-	case 5:
-		err = inspectInfoheaderV5(ctx, ctx.data[ctx.pos:ctx.pos+int64(ctx.infoHeaderSize)])
-		if err != nil {
-			return err
-		}
-	default:
-		return errors.New("Unsupported BMP version")
+	ctx.bmpVer = vi.number
+	ctx.fieldNamePrefix = vi.prefix
+
+	err = vi.inspectInfoheaderFunc(ctx, ctx.data[ctx.pos:ctx.pos+int64(ctx.infoHeaderSize)])
+	if err != nil {
+		return err
 	}
 
 	err = checkBitCount(ctx)
