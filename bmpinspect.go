@@ -411,18 +411,15 @@ func inspectInfoheaderV5(ctx *ctx_type, d []byte) error {
 }
 
 func inspectBitfields(ctx *ctx_type, d []byte) error {
-	var i int64
-	var colorNames [3]string
-
-	colorNames = [3]string{"Red:  ", "Green:", "Blue: "}
+	var colorNames = [3]string{"Red:  ", "Green:", "Blue: "}
 
 	startLine(ctx, 0)
 	ctx.print("----- BITFIELDS -----\n")
 
-	for i = 0; i < 3; i++ {
+	for i, v := range colorNames {
 		u := getDWORD(ctx, d[i*4:i*4+4])
-		startLine(ctx, i*4)
-		ctx.printf("%s %032b\n", colorNames[i], u)
+		startLine(ctx, int64(i)*4)
+		ctx.printf("%s %032b\n", v, u)
 
 	}
 	return nil
