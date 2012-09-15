@@ -12,12 +12,14 @@ import "io/ioutil"
 import "encoding/binary"
 
 const (
-	bI_RGB       = 0
-	bI_RLE8      = 1
-	bI_RLE4      = 2
-	bI_BITFIELDS = 3
-	bI_JPEG      = 4
-	bI_PNG       = 5
+	bI_RGB            = 0
+	bI_RLE8           = 1
+	bI_RLE4           = 2
+	bI_BITFIELDS      = 3
+	bI_JPEG           = 4
+	bI_PNG            = 5
+	bI_ALPHABITFIELDS = 6      // Some sources say 4, but that would conflict.
+	bI_SRCPREROTATE   = 0x8000 // Unconfirmed.
 )
 
 var cmprNames = map[uint32]string{
