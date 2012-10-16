@@ -133,7 +133,7 @@ looks like.)
 images are primarily for use with printers, and one would not expect to find
 an actual BMP file with an embedded JPEG or PNG image.
 
-- Does not OS/2v2-style BMPs (with a 64-byte header).
+- Does not support some rare types of BMPs (with 52-, 56, or 64-byte headers).
 
 - Does not support Windows Mobile-style compression settings
 "BI_ALPHABITFIELDS" and "BI_SRCPREROTATE".

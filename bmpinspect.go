@@ -68,6 +68,9 @@ type versionInfo_type struct {
 var versionInfo = map[uint32]versionInfo_type{
 	12:  {"os2", "bc", "OS/2-style", inspectInfoheaderOS2},
 	40:  {"3", "bi", "version 3", inspectInfoheaderV3},
+	52:  {"", "", "BITMAPV2INFOHEADER", nil},
+	56:  {"", "", "BITMAPV3INFOHEADER", nil},
+	64:  {"", "", "OS/2-BITMAPCOREHEADER2", nil},
 	108: {"4", "bV4", "version 4", inspectInfoheaderV4},
 	124: {"5", "bV5", "version 5", inspectInfoheaderV5},
 }
@@ -527,6 +530,9 @@ func readInfoheader(ctx *ctx_type) error {
 	}
 
 	if !knownVersion {
+		return errors.New("Unknown BMP version")
+	}
+	if vi.inspectInfoheaderFunc == nil {
 		return errors.New("Unsupported BMP version")
 	}
 
