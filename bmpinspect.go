@@ -57,7 +57,7 @@ var intentNames = map[uint32]string{
 }
 
 type versionInfo_type struct {
-	number                int
+	id                    string
 	prefix                string
 	name                  string
 	inspectInfoheaderFunc func(ctx *ctx_type, d []byte) error
@@ -66,10 +66,10 @@ type versionInfo_type struct {
 // Information about the different BMP versions, keyed off of the number of
 // bytes in the InfoHeader.
 var versionInfo = map[uint32]versionInfo_type{
-	12:  {2, "bc", "OS/2-style", inspectInfoheaderV2},
-	40:  {3, "bi", "version 3", inspectInfoheaderV3},
-	108: {4, "bV4", "version 4", inspectInfoheaderV4},
-	124: {5, "bV5", "version 5", inspectInfoheaderV5},
+	12:  {"os2", "bc", "OS/2-style", inspectInfoheaderOS2},
+	40:  {"3", "bi", "version 3", inspectInfoheaderV3},
+	108: {"4", "bV4", "version 4", inspectInfoheaderV4},
+	124: {"5", "bV5", "version 5", inspectInfoheaderV5},
 }
 
 type ctx_type struct {
@@ -80,7 +80,7 @@ type ctx_type struct {
 
 	printPixels bool
 
-	bmpVer   int // 2, 3, 4, or 5. 0=unknown
+	bmpVerID string // Version name used by bmpinspect: "os2", "3", "4", "5"
 	bitCount int
 
 	imgWidth       int
@@ -196,7 +196,7 @@ func inspectFileheader(ctx *ctx_type, d []byte) error {
 	return nil
 }
 
-func inspectInfoheaderV2(ctx *ctx_type, d []byte) error {
+func inspectInfoheaderOS2(ctx *ctx_type, d []byte) error {
 
 	bcWidth := getWORD(ctx, d[4:6])
 	ctx.pfxPrintf(4, "Width: %v\n", bcWidth)
@@ -267,7 +267,7 @@ func inspectInfoheaderV3(ctx *ctx_type, d []byte) error {
 		ctx.isCompressed = true
 	}
 
-	if ctx.compression == bI_BITFIELDS && ctx.bmpVer == 3 {
+	if ctx.compression == bI_BITFIELDS && ctx.bmpVerID == "3" {
 		ctx.hasBitfieldsSegment = true
 	}
 
@@ -324,11 +324,11 @@ func inspectCIEXYZTRIPLE(ctx *ctx_type, d []byte, offset int64) {
 }
 
 func csTypeIsValid(ctx *ctx_type, csType uint32) bool {
-	if ctx.bmpVer == 4 {
+	if ctx.bmpVerID == "4" {
 		if csType == lCS_CALIBRATED_RGB {
 			return true
 		}
-	} else if ctx.bmpVer == 5 {
+	} else if ctx.bmpVerID == "5" {
 		switch csType {
 		case lCS_CALIBRATED_RGB, lCS_sRGB, lCS_WINDOWS_COLOR_SPACE,
 			pROFILE_LINKED, pROFILE_EMBEDDED:
@@ -482,13 +482,14 @@ func checkBitCount(ctx *ctx_type) error {
 
 	switch ctx.bitCount {
 	case 0:
-		if ctx.bmpVer >= 4 && (ctx.compression == bI_JPEG || ctx.compression == bI_PNG) {
+		if (ctx.bmpVerID == "4" || ctx.bmpVerID == "5") &&
+			(ctx.compression == bI_JPEG || ctx.compression == bI_PNG) {
 			ok = true
 		}
 	case 1, 4, 8, 24:
 		ok = true
 	case 16, 32:
-		if ctx.bmpVer >= 3 {
+		if ctx.bmpVerID == "3" || ctx.bmpVerID == "4" || ctx.bmpVerID == "5" {
 			ok = true
 		}
 	}
@@ -529,7 +530,7 @@ func readInfoheader(ctx *ctx_type) error {
 		return errors.New("Unsupported BMP version")
 	}
 
-	ctx.bmpVer = vi.number
+	ctx.bmpVerID = vi.id
 	ctx.fieldNamePrefix = vi.prefix
 
 	err = vi.inspectInfoheaderFunc(ctx, ctx.data[ctx.pos:ctx.pos+int64(ctx.infoHeaderSize)])
