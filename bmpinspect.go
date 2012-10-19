@@ -138,26 +138,26 @@ func (ctx *ctx_type) pfxPrintf(offset int64, format string, a ...interface{}) {
 }
 
 // DWORD is an unsigned 32-bit little-endian integer.
-func getDWORD(ctx *ctx_type, d []byte) uint32 {
+func getDWORD(d []byte) uint32 {
 	return binary.LittleEndian.Uint32(d[0:4])
 }
 
 // WORD is an unsigned 16-bit little-endian integer.
-func getWORD(ctx *ctx_type, d []byte) uint16 {
+func getWORD(d []byte) uint16 {
 	return binary.LittleEndian.Uint16(d[0:2])
 }
 
 // LONG is a signed 32-bit little-endian integer.
-func getLONG(ctx *ctx_type, d []byte) int32 {
-	return int32(getDWORD(ctx, d))
+func getLONG(d []byte) int32 {
+	return int32(getDWORD(d))
 }
 
-func getFloat16dot16(ctx *ctx_type, d []byte) float64 {
-	return float64(getDWORD(ctx, d)) / 65536.0
+func getFloat16dot16(d []byte) float64 {
+	return float64(getDWORD(d)) / 65536.0
 }
 
-func getFloat2dot30(ctx *ctx_type, d []byte) float64 {
-	return float64(getDWORD(ctx, d)) / 1073741824.0
+func getFloat2dot30(d []byte) float64 {
+	return float64(getDWORD(d)) / 1073741824.0
 }
 
 // Functions named "inspect*" are passed a slice to read from,
@@ -176,7 +176,7 @@ func inspectFileheader(ctx *ctx_type, d []byte) error {
 		return errors.New("Not a BMP file")
 	}
 
-	bfSize := getDWORD(ctx, d[2:6])
+	bfSize := getDWORD(d[2:6])
 	startLine(ctx, 2)
 	ctx.printf("bfSize: %v\n", bfSize)
 	if int64(bfSize) != ctx.fileSize {
@@ -184,15 +184,15 @@ func inspectFileheader(ctx *ctx_type, d []byte) error {
 			bfSize, ctx.fileSize)
 	}
 
-	bfReserved1 := getWORD(ctx, d[6:8])
+	bfReserved1 := getWORD(d[6:8])
 	startLine(ctx, 6)
 	ctx.printf("bfReserved1: %v\n", bfReserved1)
 
-	bfReserved2 := getWORD(ctx, d[8:10])
+	bfReserved2 := getWORD(d[8:10])
 	startLine(ctx, 8)
 	ctx.printf("bfReserved2: %v\n", bfReserved2)
 
-	ctx.bfOffBits = getDWORD(ctx, d[10:14])
+	ctx.bfOffBits = getDWORD(d[10:14])
 	startLine(ctx, 10)
 	ctx.printf("bfOffBits: %v\n", ctx.bfOffBits)
 
@@ -201,18 +201,18 @@ func inspectFileheader(ctx *ctx_type, d []byte) error {
 
 func inspectInfoheaderOS2(ctx *ctx_type, d []byte) error {
 
-	bcWidth := getWORD(ctx, d[4:6])
+	bcWidth := getWORD(d[4:6])
 	ctx.pfxPrintf(4, "Width: %v\n", bcWidth)
 	ctx.imgWidth = int(bcWidth)
 
-	bcHeight := getWORD(ctx, d[6:8])
+	bcHeight := getWORD(d[6:8])
 	ctx.pfxPrintf(6, "Height: %v\n", bcHeight)
 	ctx.imgHeight = int(bcHeight)
 
-	bcPlanes := getWORD(ctx, d[8:10])
+	bcPlanes := getWORD(d[8:10])
 	ctx.pfxPrintf(8, "Planes: %v\n", bcPlanes)
 
-	bcBitCount := getWORD(ctx, d[10:12])
+	bcBitCount := getWORD(d[10:12])
 	ctx.pfxPrintf(10, "BitCount: %v\n", bcBitCount)
 	ctx.bitCount = int(bcBitCount)
 
@@ -235,11 +235,11 @@ func printDotsPerMeter(ctx *ctx_type, n int32) {
 func inspectInfoheaderV3(ctx *ctx_type, d []byte) error {
 	var ok bool
 
-	biWidth := getLONG(ctx, d[4:8])
+	biWidth := getLONG(d[4:8])
 	ctx.pfxPrintf(4, "Width: %v\n", biWidth)
 	ctx.imgWidth = int(biWidth)
 
-	biHeight := getLONG(ctx, d[8:12])
+	biHeight := getLONG(d[8:12])
 	ctx.pfxPrintf(8, "Height: %v\n", biHeight)
 	if biHeight < 0 {
 		ctx.topDown = true
@@ -248,17 +248,17 @@ func inspectInfoheaderV3(ctx *ctx_type, d []byte) error {
 		ctx.imgHeight = int(biHeight)
 	}
 
-	biPlanes := getWORD(ctx, d[12:14])
+	biPlanes := getWORD(d[12:14])
 	ctx.pfxPrintf(12, "Planes: %v\n", biPlanes)
 	if biPlanes != 1 {
 		ctx.print("Warning: Planes is required to be 1\n")
 	}
 
-	biBitCount := getWORD(ctx, d[14:16])
+	biBitCount := getWORD(d[14:16])
 	ctx.pfxPrintf(14, "BitCount: %v\n", biBitCount)
 	ctx.bitCount = int(biBitCount)
 
-	ctx.compression = getDWORD(ctx, d[16:20])
+	ctx.compression = getDWORD(d[16:20])
 	ctx.pfxPrintf(16, "Compression: %v", ctx.compression)
 	var cmprName string
 	cmprName, ok = cmprNames[ctx.compression]
@@ -274,24 +274,24 @@ func inspectInfoheaderV3(ctx *ctx_type, d []byte) error {
 		ctx.hasBitfieldsSegment = true
 	}
 
-	ctx.sizeImage = getDWORD(ctx, d[20:24])
+	ctx.sizeImage = getDWORD(d[20:24])
 	ctx.pfxPrintf(20, "SizeImage: %v\n", ctx.sizeImage)
 	if ctx.sizeImage == 0 && ctx.isCompressed {
 		ctx.print("Warning: SizeImage is required for compressed images\n")
 	}
 
-	biXPelsPerMeter := getLONG(ctx, d[24:28])
+	biXPelsPerMeter := getLONG(d[24:28])
 	ctx.pfxPrintf(24, "XPelsPerMeter: ")
 	printDotsPerMeter(ctx, biXPelsPerMeter)
 
-	biYPelsPerMeter := getLONG(ctx, d[28:32])
+	biYPelsPerMeter := getLONG(d[28:32])
 	ctx.pfxPrintf(28, "YPelsPerMeter: ")
 	printDotsPerMeter(ctx, biYPelsPerMeter)
 
-	biClrUsed := getDWORD(ctx, d[32:36])
+	biClrUsed := getDWORD(d[32:36])
 	ctx.pfxPrintf(32, "ClrUsed: %v\n", biClrUsed)
 
-	biClrImportant := getDWORD(ctx, d[36:40])
+	biClrImportant := getDWORD(d[36:40])
 	ctx.pfxPrintf(36, "ClrImportant: %v\n", biClrImportant)
 
 	if biClrUsed > 100000 {
@@ -314,9 +314,9 @@ func inspectInfoheaderV3(ctx *ctx_type, d []byte) error {
 }
 
 func formatCIEXYZ(ctx *ctx_type, d []byte) string {
-	x := getFloat2dot30(ctx, d[0:4])
-	y := getFloat2dot30(ctx, d[4:8])
-	z := getFloat2dot30(ctx, d[8:12])
+	x := getFloat2dot30(d[0:4])
+	y := getFloat2dot30(d[4:8])
+	z := getFloat2dot30(d[8:12])
 	return fmt.Sprintf("X:%.8f Y:%.8f Z:%.8f", x, y, z)
 }
 
@@ -351,16 +351,16 @@ func inspectInfoheaderV4(ctx *ctx_type, d []byte) error {
 		return err
 	}
 
-	redMask := getDWORD(ctx, d[40:44])
+	redMask := getDWORD(d[40:44])
 	ctx.pfxPrintf(40, "RedMask:   %032b\n", redMask)
-	greenMask := getDWORD(ctx, d[44:48])
+	greenMask := getDWORD(d[44:48])
 	ctx.pfxPrintf(44, "GreenMask: %032b\n", greenMask)
-	blueMask := getDWORD(ctx, d[48:52])
+	blueMask := getDWORD(d[48:52])
 	ctx.pfxPrintf(48, "BlueMask:  %032b\n", blueMask)
-	alphaMask := getDWORD(ctx, d[52:56])
+	alphaMask := getDWORD(d[52:56])
 	ctx.pfxPrintf(52, "AlphaMask: %032b\n", alphaMask)
 
-	csType := getDWORD(ctx, d[56:60])
+	csType := getDWORD(d[56:60])
 	ctx.pfxPrintf(56, "CSType: 0x%x", csType)
 	name, ok = csTypeNames[csType]
 	if ok {
@@ -373,13 +373,13 @@ func inspectInfoheaderV4(ctx *ctx_type, d []byte) error {
 
 	inspectCIEXYZTRIPLE(ctx, d[60:96], 60)
 
-	gammaRed := getFloat16dot16(ctx, d[96:100])
+	gammaRed := getFloat16dot16(d[96:100])
 	ctx.pfxPrintf(96, "GammaRed:   %.6f\n", gammaRed)
 
-	gammaGreen := getFloat16dot16(ctx, d[100:104])
+	gammaGreen := getFloat16dot16(d[100:104])
 	ctx.pfxPrintf(100, "GammaGreen: %.6f\n", gammaGreen)
 
-	gammaBlue := getFloat16dot16(ctx, d[104:108])
+	gammaBlue := getFloat16dot16(d[104:108])
 	ctx.pfxPrintf(104, "GammaBlue:  %.6f\n", gammaBlue)
 
 	return nil
@@ -395,7 +395,7 @@ func inspectInfoheaderV5(ctx *ctx_type, d []byte) error {
 		return err
 	}
 
-	intent := getDWORD(ctx, d[108:112])
+	intent := getDWORD(d[108:112])
 	ctx.pfxPrintf(108, "Intent: %v", intent)
 	name, ok = intentNames[intent]
 	if ok {
@@ -403,13 +403,13 @@ func inspectInfoheaderV5(ctx *ctx_type, d []byte) error {
 	}
 	ctx.print("\n")
 
-	profileData := getDWORD(ctx, d[112:116])
+	profileData := getDWORD(d[112:116])
 	ctx.pfxPrintf(112, "ProfileData: %v\n", profileData)
 
-	profileSize := getDWORD(ctx, d[116:120])
+	profileSize := getDWORD(d[116:120])
 	ctx.pfxPrintf(116, "ProfileSize: %v\n", profileSize)
 
-	reserved := getDWORD(ctx, d[120:124])
+	reserved := getDWORD(d[120:124])
 	ctx.pfxPrintf(120, "Reserved: %v\n", reserved)
 
 	return nil
@@ -422,7 +422,7 @@ func inspectBitfields(ctx *ctx_type, d []byte) error {
 	ctx.print("----- BITFIELDS -----\n")
 
 	for i, v := range colorNames {
-		u := getDWORD(ctx, d[i*4:i*4+4])
+		u := getDWORD(d[i*4 : i*4+4])
 		startLine(ctx, int64(i)*4)
 		ctx.printf("%s %032b\n", v, u)
 
@@ -513,7 +513,7 @@ func readInfoheader(ctx *ctx_type) error {
 	ctx.print("----- INFOHEADER -----\n")
 
 	// Read the "biSize" field, which tells us the BMP version.
-	ctx.infoHeaderSize = getDWORD(ctx, ctx.data[ctx.pos:ctx.pos+4])
+	ctx.infoHeaderSize = getDWORD(ctx.data[ctx.pos : ctx.pos+4])
 	startLine(ctx, 0)
 	ctx.printf("(bc|bi|bV4|bV5)Size: %v", ctx.infoHeaderSize)
 
@@ -597,7 +597,7 @@ func printRow_8(ctx *ctx_type, d []byte) {
 func printRow_16(ctx *ctx_type, d []byte) {
 	var i int
 	for i = 0; i < ctx.imgWidth; i++ {
-		ctx.printf(" %04x", getWORD(ctx, d[i*2:i*2+2]))
+		ctx.printf(" %04x", getWORD(d[i*2:i*2+2]))
 	}
 }
 
@@ -615,7 +615,7 @@ func printRow_24(ctx *ctx_type, d []byte) {
 func printRow_32(ctx *ctx_type, d []byte) {
 	var i int
 	for i = 0; i < ctx.imgWidth; i++ {
-		ctx.printf(" %08x", getDWORD(ctx, d[i*4:i*4+4]))
+		ctx.printf(" %08x", getDWORD(d[i*4:i*4+4]))
 	}
 }
 
