@@ -3,14 +3,20 @@ Windows BMP image file.
 
 Usage:
 
-  bmpinspect <bmp-file.bmp>
+    bmpinspect <bmp-file.bmp>
 
-Refer to the doc.go file for details.
+Refer to the doc.go file for details, or view the documentation online at
+<http://go.pkgdoc.org/github.com/jsummers/bmpinspect>.
 
 bmpinspect is written in Go; see <http://golang.org/>. It should work on any
 system for which a Go compiler is available.
 
-To compile, try running "go build bmpinspect.go".
+To download and install, run
+
+    go get github.com/jsummers/bmpinspect
+
+The bmpinspect program should appear at PATH/bin/fpr, where PATH is the
+first path in your GOPATH environment variable.
 
 Copyright (c) 2012 Jason Summers
 

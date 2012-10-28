@@ -34,8 +34,8 @@ stored from bottom up, so the row number starts out high and finishes at 0.
 
 === Sample order ===
 
-BMP uses the order Blue-Green-Red for some things, and the more-usual Red-
-Green-Blue for others. Also, it uses little-endian byte order, which means
+BMP uses the order Blue-Green-Red for some things, and the more-usual
+Red-Green-Blue for others. Also, it uses little-endian byte order, which means
 that a number like 0x01020304 will appear in the file in the order 04 03 02
 01, the reverse of the order when it is written out.
 
@@ -46,13 +46,13 @@ byte). When bmpinspect displays the palette, it reorders it to R-G-B.
 displays such a pixel, it uses the order R-G-B. For example "234567" means
 R=0x23, G=0x45, B=0x67.
 
-Items in R-G-B order include BITFIELDS definitions (the order in which the
-definitions appear, that is), and Gamma and Endpoints fields.
+Items in R-G-B order include BITFIELDS definitions, and Gamma and Endpoints
+fields.
 
-The BITFIELDS definitions used by 16- and 32-bit images are 32-bit little-
-endian integers. The samples can be in any order, but usually the highest-
-order bits are used for red, and the lowest for blue. Because it's little-
-endian, that means the blue bits appear first in the file.
+The BITFIELDS definitions used by 16- and 32-bit images are 32-bit
+little-endian integers. The samples can be in any order, but usually the
+highest-order bits are used for red, and the lowest for blue. Because it's
+little-endian, that means the blue bits appear first in the file.
 
 The image data of a 16-bit image is interpreted as a sequence of 16-bit
 little-endian integers, each representing one pixel, and interpreted according
