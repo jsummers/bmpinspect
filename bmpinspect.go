@@ -238,14 +238,24 @@ func inspectInfoheaderV3(ctx *ctx_type, d []byte) error {
 	biWidth := getLONG(d[4:8])
 	ctx.pfxPrintf(4, "Width: %v\n", biWidth)
 	ctx.imgWidth = int(biWidth)
+	if ctx.imgWidth < 1 {
+		ctx.print("Warning: Bad width\n")
+		ctx.printPixels = false
+	}
 
 	biHeight := getLONG(d[8:12])
-	ctx.pfxPrintf(8, "Height: %v\n", biHeight)
+	ctx.pfxPrintf(8, "Height: %v", biHeight)
 	if biHeight < 0 {
 		ctx.topDown = true
 		ctx.imgHeight = int(-biHeight)
+		ctx.printf(" (%v pixels, top-down)", ctx.imgHeight)
 	} else {
 		ctx.imgHeight = int(biHeight)
+	}
+	ctx.print("\n")
+	if ctx.imgHeight < 1 {
+		ctx.print("Warning: Bad height\n")
+		ctx.printPixels = false
 	}
 
 	biPlanes := getWORD(d[12:14])
@@ -268,6 +278,10 @@ func inspectInfoheaderV3(ctx *ctx_type, d []byte) error {
 	ctx.printf(" = %v\n", cmprName)
 	if ctx.compression != bI_RGB && ctx.compression != bI_BITFIELDS {
 		ctx.isCompressed = true
+		if ctx.topDown {
+			ctx.print("Warning: Compressed images may not be top-down\n")
+			ctx.printPixels = false
+		}
 	}
 
 	if ctx.compression == bI_BITFIELDS && ctx.bmpVerID == "3" {
@@ -829,26 +843,16 @@ func inspectBits(ctx *ctx_type, d []byte) error {
 	startLine(ctx, 0)
 	ctx.printf("(Size implied by file size:         %v)\n", len(d))
 
-	var printPixels bool
-	printPixels = true
-
-	if !ctx.printPixels {
-		printPixels = false
-	}
-
 	if !ctx.isCompressed {
 		if ctx.rowStride < 1 || ctx.rowStride > 1000000 {
-			printPixels = false
+			ctx.printPixels = false
 		} else if int64(len(d)) < ctx.calculatedSize {
-			printPixels = false
+			ctx.printf("Warning: Unexpected end of file\n")
+			ctx.printPixels = false
 		}
 	}
 
-	if ctx.imgWidth < 1 || ctx.imgHeight < 1 {
-		printPixels = false
-	}
-
-	if printPixels {
+	if ctx.printPixels {
 		if ctx.isCompressed {
 			if ctx.compression == bI_RLE4 || ctx.compression == bI_RLE8 {
 				printRLECompressedPixels(ctx, d)
