@@ -674,25 +674,46 @@ func printUncompressedPixels(ctx *ctx_type, d []byte) {
 type rlectx_type struct {
 	bytesInThisRow   int
 	rowHeaderPrinted bool
+	xpos, ypos       int
+
+	badPosFlag   bool
+	badPosWarned bool
+	badPos_X     int
+	badPos_Y     int
 }
 
 // Do some things that need to be done at the end of every row.
 func endRLERow(ctx *ctx_type, rlectx *rlectx_type) {
-	if !rlectx.rowHeaderPrinted {
-		// Row was never started.
-		return
+	if rlectx.rowHeaderPrinted {
+		ctx.printf(" [%v bytes]\n", rlectx.bytesInThisRow)
+		rlectx.bytesInThisRow = 0
+		rlectx.rowHeaderPrinted = false
 	}
-	ctx.printf(" [%v bytes]\n", rlectx.bytesInThisRow)
-	rlectx.bytesInThisRow = 0
-	rlectx.rowHeaderPrinted = false
+
+	// Print pending warnings.
+
+	if rlectx.badPosFlag && !rlectx.badPosWarned {
+		ctx.printf("Warning: Out of bounds pixel (%d,%d)\n", rlectx.badPos_X, rlectx.badPos_Y)
+		rlectx.badPosWarned = true
+	}
+}
+
+func checkRLEPos(ctx *ctx_type, rlectx *rlectx_type) {
+	if (rlectx.xpos >= ctx.imgWidth || rlectx.ypos < 0) && !rlectx.badPosFlag {
+		rlectx.badPosFlag = true
+		rlectx.badPos_X = rlectx.xpos
+		rlectx.badPos_Y = rlectx.ypos
+	}
 }
 
 func printRLE4Pixel(ctx *ctx_type, rlectx *rlectx_type, n byte) {
 	ctx.printf("%x", n)
+	checkRLEPos(ctx, rlectx)
 }
 
 func printRLE8Pixel(ctx *ctx_type, rlectx *rlectx_type, n byte) {
 	ctx.printf("%02x", n)
+	checkRLEPos(ctx, rlectx)
 }
 
 func printRLECompressedPixels(ctx *ctx_type, d []byte) {
@@ -708,14 +729,13 @@ func printRLECompressedPixels(ctx *ctx_type, d []byte) {
 
 	rlectx := new(rlectx_type)
 	var pos int = 0 // current position in d[]
-	var xpos, ypos int
 	var unc_pixels_left int = 0
 	var b1, b2 byte
 	var deltaFlag bool
 
-	xpos = 0
+	rlectx.xpos = 0
 	// RLE-compressed BMPs are not allowed to be top-down.
-	ypos = ctx.imgHeight - 1
+	rlectx.ypos = ctx.imgHeight - 1
 
 	for {
 		if pos+1 >= len(d) {
@@ -726,8 +746,8 @@ func printRLECompressedPixels(ctx *ctx_type, d []byte) {
 
 		if !rlectx.rowHeaderPrinted {
 			startLine(ctx, int64(pos))
-			if ypos >= 0 {
-				ctx.printf("row %d:", ypos)
+			if rlectx.ypos >= 0 {
+				ctx.printf("row %d:", rlectx.ypos)
 			} else {
 				ctx.print("row n/a:")
 			}
@@ -744,25 +764,31 @@ func printRLECompressedPixels(ctx *ctx_type, d []byte) {
 			if ctx.compression == bI_RLE4 {
 				// The two bytes we read store up to 4 uncompressed pixels.
 				printRLE4Pixel(ctx, rlectx, b1>>4)
+				rlectx.xpos++
 				unc_pixels_left--
 				if unc_pixels_left > 0 {
 					printRLE4Pixel(ctx, rlectx, b1&0x0f)
+					rlectx.xpos++
 					unc_pixels_left--
 				}
 				if unc_pixels_left > 0 {
 					printRLE4Pixel(ctx, rlectx, b2>>4)
+					rlectx.xpos++
 					unc_pixels_left--
 				}
 				if unc_pixels_left > 0 {
 					printRLE4Pixel(ctx, rlectx, b2&0x0f)
+					rlectx.xpos++
 					unc_pixels_left--
 				}
 			} else { // RLE8
 				printRLE8Pixel(ctx, rlectx, b1)
+				rlectx.xpos++
 				unc_pixels_left--
 				if unc_pixels_left > 0 {
 					ctx.print(" ")
 					printRLE8Pixel(ctx, rlectx, b2)
+					rlectx.xpos++
 					unc_pixels_left--
 				}
 				if unc_pixels_left > 0 {
@@ -774,8 +800,8 @@ func printRLECompressedPixels(ctx *ctx_type, d []byte) {
 			}
 		} else if deltaFlag {
 			ctx.printf("(%v,%v)", b1, b2)
-			xpos += int(b1)
-			ypos -= int(b2)
+			rlectx.xpos += int(b1)
+			rlectx.ypos -= int(b2)
 			if b2 > 0 {
 				// A nonzero y delta moves us to a different row, so end the
 				// current row.
@@ -786,8 +812,8 @@ func printRLECompressedPixels(ctx *ctx_type, d []byte) {
 			if b2 == 0 {
 				ctx.print(" EOL")
 				endRLERow(ctx, rlectx)
-				ypos--
-				xpos = 0
+				rlectx.ypos--
+				rlectx.xpos = 0
 			} else if b2 == 1 {
 				ctx.print(" EOBMP")
 				endRLERow(ctx, rlectx)
