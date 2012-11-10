@@ -110,6 +110,12 @@ type ctx_type struct {
 	actualBitsSize int64 // 0 = unknown
 
 	fieldNamePrefix string
+
+	badColorFlag   bool
+	badColorWarned bool
+	badColorIndex  int
+	badColor_X     int
+	badColor_Y     int
 }
 
 // A wrapper for fmt.Printf.
@@ -570,6 +576,15 @@ func readInfoheader(ctx *ctx_type) error {
 	return nil
 }
 
+// Record information about a bad palette index.
+func badColor(ctx *ctx_type, n int, xpos int) {
+	if !ctx.badColorFlag {
+		ctx.badColorIndex = n
+		ctx.badColor_X = xpos
+		ctx.badColorFlag = true
+	}
+}
+
 func printRow_1(ctx *ctx_type, d []byte) {
 	var i int
 	var n byte
@@ -581,6 +596,9 @@ func printRow_1(ctx *ctx_type, d []byte) {
 			ctx.print("0")
 		} else {
 			ctx.print("1")
+		}
+		if int(n) >= ctx.palNumEntries {
+			badColor(ctx, int(n), i)
 		}
 	}
 }
@@ -598,13 +616,22 @@ func printRow_4(ctx *ctx_type, d []byte) {
 			n = n & 0x0f
 		}
 		ctx.printf("%x", n)
+		if int(n) >= ctx.palNumEntries {
+			badColor(ctx, int(n), i)
+		}
 	}
 }
 
 func printRow_8(ctx *ctx_type, d []byte) {
 	var i int
+	var n byte
+
 	for i = 0; i < ctx.imgWidth; i++ {
-		ctx.printf(" %02x", d[i])
+		n = d[i]
+		ctx.printf(" %02x", n)
+		if int(n) >= ctx.palNumEntries {
+			badColor(ctx, int(n), i)
+		}
 	}
 }
 
@@ -668,6 +695,13 @@ func printUncompressedPixels(ctx *ctx_type, d []byte) {
 		ctx.printf("row %d:", rowLogical)
 		pR(ctx, d[offset:offset+ctx.rowStride])
 		ctx.print("\n")
+
+		// At the end of the row, display any pending warning.
+		if ctx.badColorFlag && !ctx.badColorWarned {
+			ctx.printf("Warning: Bad palette index 0x%02x at (%d,%d)\n", ctx.badColorIndex,
+				ctx.badColor_X, rowLogical)
+			ctx.badColorWarned = true
+		}
 	}
 }
 
@@ -696,24 +730,37 @@ func endRLERow(ctx *ctx_type, rlectx *rlectx_type) {
 		ctx.printf("Warning: Out of bounds pixel (%d,%d)\n", rlectx.badPos_X, rlectx.badPos_Y)
 		rlectx.badPosWarned = true
 	}
+
+	if ctx.badColorFlag && !ctx.badColorWarned {
+		ctx.printf("Warning: Bad palette index 0x%02x at (%d,%d)\n", ctx.badColorIndex,
+			ctx.badColor_X, ctx.badColor_Y)
+		ctx.badColorWarned = true
+	}
 }
 
-func checkRLEPos(ctx *ctx_type, rlectx *rlectx_type) {
+func checkRLEPosAndColor(ctx *ctx_type, rlectx *rlectx_type, n byte) {
 	if (rlectx.xpos >= ctx.imgWidth || rlectx.ypos < 0) && !rlectx.badPosFlag {
 		rlectx.badPosFlag = true
 		rlectx.badPos_X = rlectx.xpos
 		rlectx.badPos_Y = rlectx.ypos
 	}
+
+	if int(n) >= ctx.palNumEntries && !ctx.badColorFlag {
+		ctx.badColorIndex = int(n)
+		ctx.badColor_X = rlectx.xpos
+		ctx.badColor_Y = rlectx.ypos
+		ctx.badColorFlag = true
+	}
 }
 
 func printRLE4Pixel(ctx *ctx_type, rlectx *rlectx_type, n byte) {
 	ctx.printf("%x", n)
-	checkRLEPos(ctx, rlectx)
+	checkRLEPosAndColor(ctx, rlectx, n)
 }
 
 func printRLE8Pixel(ctx *ctx_type, rlectx *rlectx_type, n byte) {
 	ctx.printf("%02x", n)
-	checkRLEPos(ctx, rlectx)
+	checkRLEPosAndColor(ctx, rlectx, n)
 }
 
 func printRLECompressedPixels(ctx *ctx_type, d []byte) {
@@ -837,8 +884,31 @@ func printRLECompressedPixels(ctx *ctx_type, d []byte) {
 				} else {
 					ctx.printf(" %v{%x%x}", b1, n1, n2)
 				}
+
+				// Check the first pixel of this run for valid color and position.
+				checkRLEPosAndColor(ctx, rlectx, n1)
+				rlectx.xpos++
+				if b1 > 1 {
+					// Check the second pixel.
+					checkRLEPosAndColor(ctx, rlectx, n2)
+					rlectx.xpos++
+
+					if b1 > 2 {
+						// Check the last pixel's position.
+						rlectx.xpos += int(b1) - 3
+						checkRLEPosAndColor(ctx, rlectx, 0)
+						rlectx.xpos++
+					}
+				}
+
 			} else { // RLE8
 				ctx.printf(" %v{%02x}", b1, b2)
+
+				// Check the first and last pixel of this run.
+				checkRLEPosAndColor(ctx, rlectx, b2)
+				rlectx.xpos += int(b1) - 1
+				checkRLEPosAndColor(ctx, rlectx, b2)
+				rlectx.xpos++
 			}
 		}
 	}
