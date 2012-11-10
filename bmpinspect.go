@@ -537,7 +537,7 @@ func readInfoheader(ctx *ctx_type) error {
 	if knownVersion {
 		ctx.printf(" (%s)", vi.name)
 	}
-	ctx.printf("\n")
+	ctx.print("\n")
 
 	if ctx.fileSize-ctx.pos < int64(ctx.infoHeaderSize) {
 		return errors.New("Unexpected end of file")
@@ -687,6 +687,14 @@ func endRLERow(ctx *ctx_type, rlectx *rlectx_type) {
 	rlectx.rowHeaderPrinted = false
 }
 
+func printRLE4Pixel(ctx *ctx_type, rlectx *rlectx_type, n byte) {
+	ctx.printf("%x", n)
+}
+
+func printRLE8Pixel(ctx *ctx_type, rlectx *rlectx_type, n byte) {
+	ctx.printf("%02x", n)
+}
+
 func printRLECompressedPixels(ctx *ctx_type, d []byte) {
 	if ctx.bitCount != 4 && ctx.bitCount != 8 {
 		return
@@ -721,7 +729,7 @@ func printRLECompressedPixels(ctx *ctx_type, d []byte) {
 			if ypos >= 0 {
 				ctx.printf("row %d:", ypos)
 			} else {
-				ctx.printf("row n/a:")
+				ctx.print("row n/a:")
 			}
 			rlectx.rowHeaderPrinted = true
 		}
@@ -735,33 +743,34 @@ func printRLECompressedPixels(ctx *ctx_type, d []byte) {
 		if unc_pixels_left > 0 {
 			if ctx.compression == bI_RLE4 {
 				// The two bytes we read store up to 4 uncompressed pixels.
-				ctx.printf("%x", (b1&0xf0)>>4)
+				printRLE4Pixel(ctx, rlectx, b1>>4)
 				unc_pixels_left--
 				if unc_pixels_left > 0 {
-					ctx.printf("%x", b1&0x0f)
+					printRLE4Pixel(ctx, rlectx, b1&0x0f)
 					unc_pixels_left--
 				}
 				if unc_pixels_left > 0 {
-					ctx.printf("%x", (b2&0xf0)>>4)
+					printRLE4Pixel(ctx, rlectx, b2>>4)
 					unc_pixels_left--
 				}
 				if unc_pixels_left > 0 {
-					ctx.printf("%x", b2&0x0f)
+					printRLE4Pixel(ctx, rlectx, b2&0x0f)
 					unc_pixels_left--
 				}
 			} else { // RLE8
-				ctx.printf("%02x", b1)
+				printRLE8Pixel(ctx, rlectx, b1)
 				unc_pixels_left--
 				if unc_pixels_left > 0 {
-					ctx.printf(" %02x", b2)
+					ctx.print(" ")
+					printRLE8Pixel(ctx, rlectx, b2)
 					unc_pixels_left--
 				}
 				if unc_pixels_left > 0 {
-					ctx.printf(" ")
+					ctx.print(" ")
 				}
 			}
 			if unc_pixels_left == 0 {
-				ctx.printf("}")
+				ctx.print("}")
 			}
 		} else if deltaFlag {
 			ctx.printf("(%v,%v)", b1, b2)
@@ -775,16 +784,16 @@ func printRLECompressedPixels(ctx *ctx_type, d []byte) {
 			deltaFlag = false
 		} else if b1 == 0 {
 			if b2 == 0 {
-				ctx.printf(" EOL")
+				ctx.print(" EOL")
 				endRLERow(ctx, rlectx)
 				ypos--
 				xpos = 0
 			} else if b2 == 1 {
-				ctx.printf(" EOBMP")
+				ctx.print(" EOBMP")
 				endRLERow(ctx, rlectx)
 				break
 			} else if b2 == 2 {
-				ctx.printf(" DELTA")
+				ctx.print(" DELTA")
 				deltaFlag = true
 			} else {
 				// An upcoming uncompressed run of b2 pixels
@@ -847,7 +856,7 @@ func inspectBits(ctx *ctx_type, d []byte) error {
 		if ctx.rowStride < 1 || ctx.rowStride > 1000000 {
 			ctx.printPixels = false
 		} else if int64(len(d)) < ctx.calculatedSize {
-			ctx.printf("Warning: Unexpected end of file\n")
+			ctx.print("Warning: Unexpected end of file\n")
 			ctx.printPixels = false
 		}
 	}
