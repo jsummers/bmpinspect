@@ -104,7 +104,6 @@ an actual BMP file with an embedded JPEG or PNG image.
 
 * Does not support some rare types of BMPs (with 52-, 56, or 64-byte headers).
 
-* Does not support Windows Mobile-style compression settings
-"BI_ALPHABITFIELDS" and "BI_SRCPREROTATE".
+* Does not support Windows Mobile-style compression setting "BI_SRCPREROTATE".
 */
 package documentation

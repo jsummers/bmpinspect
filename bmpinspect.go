@@ -12,23 +12,25 @@ import "io/ioutil"
 import "encoding/binary"
 
 const (
-	bI_RGB            = 0
-	bI_RLE8           = 1
-	bI_RLE4           = 2
-	bI_BITFIELDS      = 3
-	bI_JPEG           = 4
-	bI_PNG            = 5
-	bI_ALPHABITFIELDS = 6      // Some sources say 4, but that would conflict.
+	bI_RGB       = 0
+	bI_RLE8      = 1
+	bI_RLE4      = 2
+	bI_BITFIELDS = 3
+	bI_JPEG      = 4
+	bI_PNG       = 5
+	// Some sources say 4, but 6 is confirmed by the Windows CE SDK.
+	bI_ALPHABITFIELDS = 6
 	bI_SRCPREROTATE   = 0x8000 // Unconfirmed.
 )
 
 var cmprNames = map[uint32]string{
-	bI_RGB:       "BI_RGB",
-	bI_RLE8:      "BI_RLE8",
-	bI_RLE4:      "BI_RLE4",
-	bI_BITFIELDS: "BI_BITFIELDS",
-	bI_JPEG:      "BI_JPEG",
-	bI_PNG:       "BI_PNG",
+	bI_RGB:            "BI_RGB",
+	bI_RLE8:           "BI_RLE8",
+	bI_RLE4:           "BI_RLE4",
+	bI_BITFIELDS:      "BI_BITFIELDS",
+	bI_JPEG:           "BI_JPEG",
+	bI_PNG:            "BI_PNG",
+	bI_ALPHABITFIELDS: "BI_ALPHABITFIELDS",
 }
 
 const (
@@ -97,9 +99,10 @@ type ctx_type struct {
 	palBytesPerEntry int
 	palSizeInBytes   int
 
-	hasBitfieldsSegment bool
-	isCompressed        bool
-	topDown             bool
+	hasBitfieldsSegment  bool
+	bitfieldsSegmentSize int64
+	isCompressed         bool
+	topDown              bool
 
 	// The number of bytes from the start of one row to the start of the next
 	// row, and the number of bytes in the whole image (or the number of bytes
@@ -282,7 +285,8 @@ func inspectInfoheaderV3(ctx *ctx_type, d []byte) error {
 		cmprName = "(unrecognized)"
 	}
 	ctx.printf(" = %v\n", cmprName)
-	if ctx.compression != bI_RGB && ctx.compression != bI_BITFIELDS {
+	if ctx.compression != bI_RGB && ctx.compression != bI_BITFIELDS &&
+		ctx.compression != bI_ALPHABITFIELDS {
 		ctx.isCompressed = true
 		if ctx.topDown {
 			ctx.print("Warning: Compressed images may not be top-down\n")
@@ -292,6 +296,10 @@ func inspectInfoheaderV3(ctx *ctx_type, d []byte) error {
 
 	if ctx.compression == bI_BITFIELDS && ctx.bmpVerID == "3" {
 		ctx.hasBitfieldsSegment = true
+		ctx.bitfieldsSegmentSize = 12
+	} else if ctx.compression == bI_ALPHABITFIELDS && ctx.bmpVerID == "3" {
+		ctx.hasBitfieldsSegment = true
+		ctx.bitfieldsSegmentSize = 16
 	}
 
 	ctx.sizeImage = getDWORD(d[20:24])
@@ -436,12 +444,15 @@ func inspectInfoheaderV5(ctx *ctx_type, d []byte) error {
 }
 
 func inspectBitfields(ctx *ctx_type, d []byte) error {
-	var colorNames = [3]string{"Red:  ", "Green:", "Blue: "}
+	var colorNames = [4]string{"Red:  ", "Green:", "Blue: ", "Alpha:"}
 
 	startLine(ctx, 0)
 	ctx.print("----- BITFIELDS -----\n")
 
 	for i, v := range colorNames {
+		if i*4 >= len(d) {
+			break
+		}
 		u := getDWORD(d[i*4 : i*4+4])
 		startLine(ctx, int64(i)*4)
 		ctx.printf("%s %032b\n", v, u)
@@ -989,14 +1000,14 @@ func readBmp(ctx *ctx_type) error {
 	}
 
 	if ctx.hasBitfieldsSegment {
-		if ctx.fileSize-ctx.pos < 12 {
+		if ctx.fileSize-ctx.pos < ctx.bitfieldsSegmentSize {
 			return errors.New("Unexpected end of file")
 		}
-		err = inspectBitfields(ctx, ctx.data[ctx.pos:ctx.pos+12])
+		err = inspectBitfields(ctx, ctx.data[ctx.pos:ctx.pos+ctx.bitfieldsSegmentSize])
 		if err != nil {
 			return err
 		}
-		ctx.pos += 12
+		ctx.pos += ctx.bitfieldsSegmentSize
 	}
 
 	if ctx.palSizeInBytes > 0 {
