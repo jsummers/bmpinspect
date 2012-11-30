@@ -101,6 +101,9 @@ type ctx_type struct {
 
 	hasBitfieldsSegment  bool
 	bitfieldsSegmentSize int64
+	hasProfile           bool
+	profileOffset        int64
+	profileSize          int64
 	isCompressed         bool
 	topDown              bool
 
@@ -398,6 +401,9 @@ func inspectInfoheaderV4(ctx *ctx_type, d []byte) error {
 		ctx.print(" (invalid?)")
 	}
 	ctx.print("\n")
+	if csType == pROFILE_LINKED || csType == pROFILE_EMBEDDED {
+		ctx.hasProfile = true
+	}
 
 	inspectCIEXYZTRIPLE(ctx, d[60:96], 60)
 
@@ -436,6 +442,11 @@ func inspectInfoheaderV5(ctx *ctx_type, d []byte) error {
 
 	profileSize := getDWORD(d[116:120])
 	ctx.pfxPrintf(116, "ProfileSize: %v\n", profileSize)
+
+	if ctx.hasProfile {
+		ctx.profileOffset = 14 + int64(profileData)
+		ctx.profileSize = int64(profileSize)
+	}
 
 	reserved := getDWORD(d[120:124])
 	ctx.pfxPrintf(120, "Reserved: %v\n", reserved)
@@ -957,7 +968,13 @@ func inspectBits(ctx *ctx_type, d []byte) error {
 	}
 
 	startLine(ctx, 0)
-	ctx.printf("(Size implied by file size:         %v)\n", len(d))
+	ctx.print("(Size implied by file size:         ")
+	if ctx.hasProfile {
+		ctx.print("n/a")
+	} else {
+		ctx.printf("%v", len(d))
+	}
+	ctx.print(")\n")
 
 	if !ctx.isCompressed {
 		if ctx.rowStride < 1 || ctx.rowStride > 1000000 {
@@ -979,6 +996,13 @@ func inspectBits(ctx *ctx_type, d []byte) error {
 	}
 
 	return nil
+}
+
+func inspectProfile(ctx *ctx_type, d []byte) {
+	startLine(ctx, 0)
+	ctx.print("----- Color profile -----\n")
+	startLine(ctx, 0)
+	ctx.printf("(Profile size: %v)\n", len(d))
 }
 
 func readBmp(ctx *ctx_type) error {
@@ -1040,13 +1064,34 @@ func readBmp(ctx *ctx_type) error {
 		return err
 	}
 
-	if ctx.actualBitsSize > 0 {
-		ctx.pos += ctx.actualBitsSize
-		if ctx.pos < ctx.fileSize {
-			startLineAbsolute(ctx, ctx.pos)
-			ctx.printf("----- %v unused bytes -----\n", ctx.fileSize-ctx.pos)
-		}
+	if ctx.actualBitsSize < 1 {
+		return nil
 	}
+
+	ctx.pos += ctx.actualBitsSize
+
+	if ctx.hasProfile {
+		if ctx.pos < ctx.profileOffset {
+			startLineAbsolute(ctx, ctx.pos)
+			ctx.printf("----- %v unused bytes -----\n", ctx.profileOffset-ctx.pos)
+			ctx.pos = ctx.profileOffset
+		} else if ctx.pos > ctx.profileOffset {
+			return errors.New("Invalid color profile location")
+		}
+
+		if ctx.pos+ctx.profileSize > ctx.fileSize {
+			return errors.New("Invalid color profile size")
+		}
+
+		inspectProfile(ctx, ctx.data[ctx.pos:ctx.pos+ctx.profileSize])
+		ctx.pos += ctx.profileSize
+	}
+
+	if ctx.pos < ctx.fileSize {
+		startLineAbsolute(ctx, ctx.pos)
+		ctx.printf("----- %v unused bytes -----\n", ctx.fileSize-ctx.pos)
+	}
+
 	return nil
 }
 

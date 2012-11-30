@@ -94,11 +94,9 @@ there's no need to separate them with spaces.
 
 === Known limitations ===
 
-* bmpinspect doesn't know about embedded color profiles. (I've never seen a
-BMP image with an embedded color profile, so it's hard to be sure what one
-looks like.)
+* Does not inspect the contents of color profiles.
 
-* bmpinspect doesn't inspect the contents of embedded JPEG or PNG images. Such
+* Does not inspect the contents of embedded JPEG or PNG images. Such
 images are primarily for use with printers, and one would not expect to find
 an actual BMP file with an embedded JPEG or PNG image.
 
