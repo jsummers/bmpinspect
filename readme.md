@@ -9,7 +9,7 @@ Usage:
     bmpinspect <bmp-file.bmp>
 
 Refer to the doc.go file for details, or view the documentation online at
-<http://go.pkgdoc.org/github.com/jsummers/bmpinspect>.
+<http://godoc.org/github.com/jsummers/bmpinspect>.
 
 bmpinspect is written in Go; see <http://golang.org/>. It should work on any
 system for which a Go compiler is available.
