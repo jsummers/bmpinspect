@@ -102,6 +102,7 @@ type ctx_type struct {
 	hasBitfieldsSegment  bool
 	bitfieldsSegmentSize int64
 	hasProfile           bool
+	profileIsLinked      bool
 	profileOffset        int64
 	profileSize          int64
 	isCompressed         bool
@@ -401,7 +402,10 @@ func inspectInfoheaderV4(ctx *ctx_type, d []byte) error {
 		ctx.print(" (invalid?)")
 	}
 	ctx.print("\n")
-	if csType == pROFILE_LINKED || csType == pROFILE_EMBEDDED {
+	if csType == pROFILE_LINKED {
+		ctx.hasProfile = true
+		ctx.profileIsLinked = true
+	} else if csType == pROFILE_EMBEDDED {
 		ctx.hasProfile = true
 	}
 
@@ -1005,6 +1009,34 @@ func inspectProfile(ctx *ctx_type, d []byte) {
 	ctx.printf("(Profile size: %v)\n", len(d))
 }
 
+func printWindows1252String(ctx *ctx_type, d []byte) {
+	for i := 0; i < len(d); i++ {
+		if d[i] == '\\' || d[i] == '"' {
+			// Printable ASCII characters that need escaped
+			ctx.printf("\\")
+		}
+		if d[i] >= 32 && d[i] <= 126 {
+			// Printable ASCII characters
+			ctx.printf("%c", d[i])
+		} else {
+			// Non-ASCII or non-printable characters
+			ctx.printf("\\x%02x", d[i])
+		}
+	}
+}
+
+// Display the filename of the linked profile.
+// The filename is supposed to be NUL-terminated, and use the Windows-1252
+// character set.
+func inspectLinkedProfile(ctx *ctx_type, d []byte) {
+	startLine(ctx, 0)
+	ctx.print("----- Linked color profile -----\n")
+	startLine(ctx, 0)
+	ctx.print("Filename: \"")
+	printWindows1252String(ctx, d)
+	ctx.print("\"\n")
+}
+
 func readBmp(ctx *ctx_type) error {
 	var err error
 
@@ -1083,7 +1115,11 @@ func readBmp(ctx *ctx_type) error {
 			return errors.New("Invalid color profile size")
 		}
 
-		inspectProfile(ctx, ctx.data[ctx.pos:ctx.pos+ctx.profileSize])
+		if ctx.profileIsLinked {
+			inspectLinkedProfile(ctx, ctx.data[ctx.pos:ctx.pos+ctx.profileSize])
+		} else {
+			inspectProfile(ctx, ctx.data[ctx.pos:ctx.pos+ctx.profileSize])
+		}
 		ctx.pos += ctx.profileSize
 	}
 
