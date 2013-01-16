@@ -24,13 +24,13 @@ const (
 )
 
 var cmprNames = map[uint32]string{
-	bI_RGB:            "BI_RGB",
+	bI_RGB:            "BI_RGB (uncompressed)",
 	bI_RLE8:           "BI_RLE8",
 	bI_RLE4:           "BI_RLE4",
-	bI_BITFIELDS:      "BI_BITFIELDS",
+	bI_BITFIELDS:      "BI_BITFIELDS (uncompressed)",
 	bI_JPEG:           "BI_JPEG",
 	bI_PNG:            "BI_PNG",
-	bI_ALPHABITFIELDS: "BI_ALPHABITFIELDS",
+	bI_ALPHABITFIELDS: "BI_ALPHABITFIELDS (uncompressed)",
 }
 
 const (
