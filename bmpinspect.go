@@ -537,6 +537,10 @@ func checkBitCount(ctx *ctx_type) error {
 		}
 	case 1, 4, 8, 24:
 		ok = true
+	case 2:
+		if ctx.bmpVerID == "3" {
+			ok = true
+		}
 	case 16, 32:
 		if ctx.bmpVerID == "3" || ctx.bmpVerID == "4" || ctx.bmpVerID == "5" {
 			ok = true
@@ -629,6 +633,20 @@ func printRow_1(ctx *ctx_type, d []byte) {
 	}
 }
 
+func printRow_2(ctx *ctx_type, d []byte) {
+	var i int
+	var n byte
+
+	ctx.print(" ")
+	for i = 0; i < ctx.imgWidth; i++ {
+		n = (d[i/4] >> (2 * (3 - uint(i)%4))) & 0x03
+		ctx.printf("%x", n)
+		if int(n) >= ctx.palNumEntries {
+			badColor(ctx, int(n), i)
+		}
+	}
+}
+
 func printRow_4(ctx *ctx_type, d []byte) {
 	var i int
 	var n byte
@@ -690,6 +708,7 @@ type printRowFuncType func(ctx *ctx_type, d []byte)
 
 var printRowFuncs = map[int]printRowFuncType{
 	1:  printRow_1,
+	2:  printRow_2,
 	4:  printRow_4,
 	8:  printRow_8,
 	16: printRow_16,
