@@ -72,7 +72,7 @@ var versionInfo = map[uint32]versionInfo_type{
 	40:  {"3", "bi", "version 3", inspectInfoheaderV3},
 	52:  {"", "", "BITMAPV2INFOHEADER", nil},
 	56:  {"", "", "BITMAPV3INFOHEADER", nil},
-	64:  {"", "", "OS/2-BITMAPCOREHEADER2", nil},
+	64:  {"os2V2", "", "OS/2 2.0", inspectInfoheaderOS2V2},
 	108: {"4", "bV4", "version 4", inspectInfoheaderV4},
 	124: {"5", "bV5", "version 5", inspectInfoheaderV5},
 }
@@ -233,6 +233,13 @@ func inspectInfoheaderOS2(ctx *ctx_type, d []byte) error {
 
 	if bcBitCount <= 8 {
 		ctx.palNumEntries = 1 << bcBitCount
+
+		bytesAvailableForPalette := int(ctx.bfOffBits) - (14 + int(ctx.infoHeaderSize))
+		if bytesAvailableForPalette >= 3 && bytesAvailableForPalette < 3*ctx.palNumEntries {
+			ctx.palNumEntries = bytesAvailableForPalette / 3
+			ctx.printf("Warning: Bitmap overlaps color table. Assuming there are only %d colors in color table\n",
+				ctx.palNumEntries)
+		}
 	}
 	return nil
 }
@@ -373,6 +380,37 @@ func csTypeIsValid(ctx *ctx_type, csType uint32) bool {
 	return false
 }
 
+func inspectInfoheaderOS2V2(ctx *ctx_type, d []byte) error {
+	var err error
+	var tmpui16 uint16
+	var tmpui32 uint32
+
+	err = inspectInfoheaderV3(ctx, d[0:40])
+	if err != nil {
+		return err
+	}
+
+	units := getWORD(d[40:42])
+	ctx.pfxPrintf(40, "Units: %d\n", units)
+
+	tmpui16 = getWORD(d[42:44])
+	ctx.pfxPrintf(42, "Reserved: %d\n", tmpui16)
+	tmpui16 = getWORD(d[44:46])
+	ctx.pfxPrintf(44, "Recording: %d\n", tmpui16)
+	tmpui16 = getWORD(d[46:48])
+	ctx.pfxPrintf(46, "Rendering: %d\n", tmpui16)
+
+	tmpui32 = getDWORD(d[48:52])
+	ctx.pfxPrintf(48, "Size1: %d\n", tmpui32)
+	tmpui32 = getDWORD(d[52:56])
+	ctx.pfxPrintf(52, "Size2: %d\n", tmpui32)
+	tmpui32 = getDWORD(d[56:60])
+	ctx.pfxPrintf(56, "ColorEncoding: %d\n", tmpui32)
+	tmpui32 = getDWORD(d[60:64])
+	ctx.pfxPrintf(60, "Identifier: %d\n", tmpui32)
+	return nil
+}
+
 func inspectInfoheaderV4(ctx *ctx_type, d []byte) error {
 	var err error
 	var ok bool
@@ -486,6 +524,19 @@ func inspectColorTable(ctx *ctx_type, d []byte) error {
 	startLine(ctx, 0)
 	ctx.printf("(Number of colors: %v)\n", ctx.palNumEntries)
 
+	if ctx.bmpVerID == "os2V2" {
+		bytesAvailableForPalette := int(ctx.bfOffBits) - (14 + int(ctx.infoHeaderSize))
+		if bytesAvailableForPalette == 3*ctx.palNumEntries {
+			// Some of the (very few) os2V2 sample files I've seen have this
+			// problem. It may not be widespread, so this hack may be fairly
+			// useless. But it shouldn't hurt anything.
+			ctx.printf("Warning: Bitmap overlaps color table. Assuming there are three bytes " +
+				"per color table entry, instead of four\n")
+			ctx.palBytesPerEntry = 3
+			ctx.palSizeInBytes = ctx.palNumEntries * ctx.palBytesPerEntry
+		}
+	}
+
 	// Print a header line
 	if ctx.palBytesPerEntry == 4 {
 		startLine(ctx, 0)
@@ -565,7 +616,7 @@ func readInfoheader(ctx *ctx_type) error {
 	// Read the "biSize" field, which tells us the BMP version.
 	ctx.infoHeaderSize = getDWORD(ctx.data[ctx.pos : ctx.pos+4])
 	startLine(ctx, 0)
-	ctx.printf("(bc|bi|bV4|bV5)Size: %v", ctx.infoHeaderSize)
+	ctx.printf("Info Header Size: %v", ctx.infoHeaderSize)
 
 	var vi versionInfo_type
 	var knownVersion bool
@@ -625,6 +676,7 @@ func printRow_1(ctx *ctx_type, d []byte) {
 		if n == 0 {
 			ctx.print("0")
 		} else {
+			n = 1
 			ctx.print("1")
 		}
 		if int(n) >= ctx.palNumEntries {
