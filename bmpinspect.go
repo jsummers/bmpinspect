@@ -144,7 +144,18 @@ func startLine(ctx *ctx_type, offset int64) {
 }
 
 func translateFieldName(ctx *ctx_type, origFieldName string) string {
-	return ctx.fieldNamePrefix + origFieldName
+	newFieldName := origFieldName
+
+	if ctx.bmpVerID == "os2V2" {
+		switch origFieldName {
+		case "XPelsPerMeter":
+			newFieldName = "XResolution"
+		case "YPelsPerMeter":
+			newFieldName = "YResolution"
+		}
+	}
+
+	return ctx.fieldNamePrefix + newFieldName
 }
 
 // Start a new line, using the appropriate field name, with the "bi" (etc.) prefix.
@@ -293,6 +304,13 @@ func inspectInfoheaderV3(ctx *ctx_type, d []byte) error {
 	ctx.bitCount = int(biBitCount)
 
 	ctx.compression = getDWORD(d[16:20])
+
+	if ctx.infoHeaderSize == 40 &&
+		((ctx.compression == 3 && ctx.bitCount == 1) || (ctx.compression == 4 && ctx.bitCount == 24)) {
+		ctx.print("Note: Compression not valid for BMP v3. Assuming this is an OS/2 v2 BMP\n")
+		ctx.bmpVerID = "os2V2"
+	}
+
 	ctx.pfxPrintf(16, "Compression", "%v", ctx.compression)
 	var cmprName string
 	cmprName, ok = cmprNames[ctx.compression]
