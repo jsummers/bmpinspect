@@ -143,10 +143,14 @@ func startLine(ctx *ctx_type, offset int64) {
 	startLineAbsolute(ctx, ctx.pos+offset)
 }
 
-// Start a new line, and print the "bi" (etc.) field name prefix.
-func (ctx *ctx_type) pfxPrintf(offset int64, format string, a ...interface{}) {
+func translateFieldName(ctx *ctx_type, origFieldName string) string {
+	return ctx.fieldNamePrefix + origFieldName
+}
+
+// Start a new line, using the appropriate field name, with the "bi" (etc.) prefix.
+func (ctx *ctx_type) pfxPrintf(offset int64, fieldName string, format string, a ...interface{}) {
 	startLine(ctx, offset)
-	ctx.print(ctx.fieldNamePrefix)
+	ctx.print(translateFieldName(ctx, fieldName) + ": ")
 	ctx.printf(format, a...)
 }
 
@@ -215,18 +219,18 @@ func inspectFileheader(ctx *ctx_type, d []byte) error {
 func inspectInfoheaderOS2(ctx *ctx_type, d []byte) error {
 
 	bcWidth := getWORD(d[4:6])
-	ctx.pfxPrintf(4, "Width: %v\n", bcWidth)
+	ctx.pfxPrintf(4, "Width", "%v\n", bcWidth)
 	ctx.imgWidth = int(bcWidth)
 
 	bcHeight := getWORD(d[6:8])
-	ctx.pfxPrintf(6, "Height: %v\n", bcHeight)
+	ctx.pfxPrintf(6, "Height", "%v\n", bcHeight)
 	ctx.imgHeight = int(bcHeight)
 
 	bcPlanes := getWORD(d[8:10])
-	ctx.pfxPrintf(8, "Planes: %v\n", bcPlanes)
+	ctx.pfxPrintf(8, "Planes", "%v\n", bcPlanes)
 
 	bcBitCount := getWORD(d[10:12])
-	ctx.pfxPrintf(10, "BitCount: %v\n", bcBitCount)
+	ctx.pfxPrintf(10, "BitCount", "%v\n", bcBitCount)
 	ctx.bitCount = int(bcBitCount)
 
 	ctx.palBytesPerEntry = 3
@@ -256,7 +260,7 @@ func inspectInfoheaderV3(ctx *ctx_type, d []byte) error {
 	var ok bool
 
 	biWidth := getLONG(d[4:8])
-	ctx.pfxPrintf(4, "Width: %v\n", biWidth)
+	ctx.pfxPrintf(4, "Width", "%v\n", biWidth)
 	ctx.imgWidth = int(biWidth)
 	if ctx.imgWidth < 1 {
 		ctx.print("Warning: Bad width\n")
@@ -264,7 +268,7 @@ func inspectInfoheaderV3(ctx *ctx_type, d []byte) error {
 	}
 
 	biHeight := getLONG(d[8:12])
-	ctx.pfxPrintf(8, "Height: %v", biHeight)
+	ctx.pfxPrintf(8, "Height", "%v", biHeight)
 	if biHeight < 0 {
 		ctx.topDown = true
 		ctx.imgHeight = int(-biHeight)
@@ -279,17 +283,17 @@ func inspectInfoheaderV3(ctx *ctx_type, d []byte) error {
 	}
 
 	biPlanes := getWORD(d[12:14])
-	ctx.pfxPrintf(12, "Planes: %v\n", biPlanes)
+	ctx.pfxPrintf(12, "Planes", "%v\n", biPlanes)
 	if biPlanes != 1 {
 		ctx.print("Warning: Planes is required to be 1\n")
 	}
 
 	biBitCount := getWORD(d[14:16])
-	ctx.pfxPrintf(14, "BitCount: %v\n", biBitCount)
+	ctx.pfxPrintf(14, "BitCount", "%v\n", biBitCount)
 	ctx.bitCount = int(biBitCount)
 
 	ctx.compression = getDWORD(d[16:20])
-	ctx.pfxPrintf(16, "Compression: %v", ctx.compression)
+	ctx.pfxPrintf(16, "Compression", "%v", ctx.compression)
 	var cmprName string
 	cmprName, ok = cmprNames[ctx.compression]
 	if !ok {
@@ -314,24 +318,24 @@ func inspectInfoheaderV3(ctx *ctx_type, d []byte) error {
 	}
 
 	ctx.sizeImage = getDWORD(d[20:24])
-	ctx.pfxPrintf(20, "SizeImage: %v\n", ctx.sizeImage)
+	ctx.pfxPrintf(20, "SizeImage", "%v\n", ctx.sizeImage)
 	if ctx.sizeImage == 0 && ctx.isCompressed {
 		ctx.print("Warning: SizeImage is required for compressed images\n")
 	}
 
 	biXPelsPerMeter := getLONG(d[24:28])
-	ctx.pfxPrintf(24, "XPelsPerMeter: ")
+	ctx.pfxPrintf(24, "XPelsPerMeter", "")
 	printDotsPerMeter(ctx, biXPelsPerMeter)
 
 	biYPelsPerMeter := getLONG(d[28:32])
-	ctx.pfxPrintf(28, "YPelsPerMeter: ")
+	ctx.pfxPrintf(28, "YPelsPerMeter", "")
 	printDotsPerMeter(ctx, biYPelsPerMeter)
 
 	biClrUsed := getDWORD(d[32:36])
-	ctx.pfxPrintf(32, "ClrUsed: %v\n", biClrUsed)
+	ctx.pfxPrintf(32, "ClrUsed", "%v\n", biClrUsed)
 
 	biClrImportant := getDWORD(d[36:40])
-	ctx.pfxPrintf(36, "ClrImportant: %v\n", biClrImportant)
+	ctx.pfxPrintf(36, "ClrImportant", "%v\n", biClrImportant)
 
 	if biClrUsed > 100000 {
 		return errors.New("Unreasonable color table size")
@@ -360,9 +364,9 @@ func formatCIEXYZ(ctx *ctx_type, d []byte) string {
 }
 
 func inspectCIEXYZTRIPLE(ctx *ctx_type, d []byte, offset int64) {
-	ctx.pfxPrintf(offset, "Endpoints: Red:   %s\n", formatCIEXYZ(ctx, d[0:12]))
-	ctx.pfxPrintf(offset+12, "Endpoints: Green: %s\n", formatCIEXYZ(ctx, d[12:24]))
-	ctx.pfxPrintf(offset+24, "Endpoints: Blue:  %s\n", formatCIEXYZ(ctx, d[24:36]))
+	ctx.pfxPrintf(offset, "Endpoints", "Red:   %s\n", formatCIEXYZ(ctx, d[0:12]))
+	ctx.pfxPrintf(offset+12, "Endpoints", "Green: %s\n", formatCIEXYZ(ctx, d[12:24]))
+	ctx.pfxPrintf(offset+24, "Endpoints", "Blue:  %s\n", formatCIEXYZ(ctx, d[24:36]))
 }
 
 func csTypeIsValid(ctx *ctx_type, csType uint32) bool {
@@ -391,23 +395,23 @@ func inspectInfoheaderOS2V2(ctx *ctx_type, d []byte) error {
 	}
 
 	units := getWORD(d[40:42])
-	ctx.pfxPrintf(40, "Units: %d\n", units)
+	ctx.pfxPrintf(40, "Units", "%d\n", units)
 
 	tmpui16 = getWORD(d[42:44])
-	ctx.pfxPrintf(42, "Reserved: %d\n", tmpui16)
+	ctx.pfxPrintf(42, "Reserved", "%d\n", tmpui16)
 	tmpui16 = getWORD(d[44:46])
-	ctx.pfxPrintf(44, "Recording: %d\n", tmpui16)
+	ctx.pfxPrintf(44, "Recording", "%d\n", tmpui16)
 	tmpui16 = getWORD(d[46:48])
-	ctx.pfxPrintf(46, "Rendering: %d\n", tmpui16)
+	ctx.pfxPrintf(46, "Rendering", "%d\n", tmpui16)
 
 	tmpui32 = getDWORD(d[48:52])
-	ctx.pfxPrintf(48, "Size1: %d\n", tmpui32)
+	ctx.pfxPrintf(48, "Size1", "%d\n", tmpui32)
 	tmpui32 = getDWORD(d[52:56])
-	ctx.pfxPrintf(52, "Size2: %d\n", tmpui32)
+	ctx.pfxPrintf(52, "Size2", "%d\n", tmpui32)
 	tmpui32 = getDWORD(d[56:60])
-	ctx.pfxPrintf(56, "ColorEncoding: %d\n", tmpui32)
+	ctx.pfxPrintf(56, "ColorEncoding", "%d\n", tmpui32)
 	tmpui32 = getDWORD(d[60:64])
-	ctx.pfxPrintf(60, "Identifier: %d\n", tmpui32)
+	ctx.pfxPrintf(60, "Identifier", "%d\n", tmpui32)
 	return nil
 }
 
@@ -422,16 +426,16 @@ func inspectInfoheaderV4(ctx *ctx_type, d []byte) error {
 	}
 
 	redMask := getDWORD(d[40:44])
-	ctx.pfxPrintf(40, "RedMask:   %032b\n", redMask)
+	ctx.pfxPrintf(40, "RedMask", "  %032b\n", redMask)
 	greenMask := getDWORD(d[44:48])
-	ctx.pfxPrintf(44, "GreenMask: %032b\n", greenMask)
+	ctx.pfxPrintf(44, "GreenMask", "%032b\n", greenMask)
 	blueMask := getDWORD(d[48:52])
-	ctx.pfxPrintf(48, "BlueMask:  %032b\n", blueMask)
+	ctx.pfxPrintf(48, "BlueMask", " %032b\n", blueMask)
 	alphaMask := getDWORD(d[52:56])
-	ctx.pfxPrintf(52, "AlphaMask: %032b\n", alphaMask)
+	ctx.pfxPrintf(52, "AlphaMask", "%032b\n", alphaMask)
 
 	csType := getDWORD(d[56:60])
-	ctx.pfxPrintf(56, "CSType: 0x%x", csType)
+	ctx.pfxPrintf(56, "CSType", "0x%x", csType)
 	name, ok = csTypeNames[csType]
 	if ok {
 		ctx.printf(" = %s", name)
@@ -450,13 +454,13 @@ func inspectInfoheaderV4(ctx *ctx_type, d []byte) error {
 	inspectCIEXYZTRIPLE(ctx, d[60:96], 60)
 
 	gammaRed := getFloat16dot16(d[96:100])
-	ctx.pfxPrintf(96, "GammaRed:   %.6f\n", gammaRed)
+	ctx.pfxPrintf(96, "GammaRed", "  %.6f\n", gammaRed)
 
 	gammaGreen := getFloat16dot16(d[100:104])
-	ctx.pfxPrintf(100, "GammaGreen: %.6f\n", gammaGreen)
+	ctx.pfxPrintf(100, "GammaGreen", "%.6f\n", gammaGreen)
 
 	gammaBlue := getFloat16dot16(d[104:108])
-	ctx.pfxPrintf(104, "GammaBlue:  %.6f\n", gammaBlue)
+	ctx.pfxPrintf(104, "GammaBlue", " %.6f\n", gammaBlue)
 
 	return nil
 }
@@ -472,7 +476,7 @@ func inspectInfoheaderV5(ctx *ctx_type, d []byte) error {
 	}
 
 	intent := getDWORD(d[108:112])
-	ctx.pfxPrintf(108, "Intent: %v", intent)
+	ctx.pfxPrintf(108, "Intent", "%v", intent)
 	name, ok = intentNames[intent]
 	if ok {
 		ctx.printf(" = %s", name)
@@ -480,10 +484,10 @@ func inspectInfoheaderV5(ctx *ctx_type, d []byte) error {
 	ctx.print("\n")
 
 	profileData := getDWORD(d[112:116])
-	ctx.pfxPrintf(112, "ProfileData: %v\n", profileData)
+	ctx.pfxPrintf(112, "ProfileData", "%v\n", profileData)
 
 	profileSize := getDWORD(d[116:120])
-	ctx.pfxPrintf(116, "ProfileSize: %v\n", profileSize)
+	ctx.pfxPrintf(116, "ProfileSize", "%v\n", profileSize)
 
 	if ctx.hasProfile {
 		ctx.profileOffset = 14 + int64(profileData)
@@ -491,7 +495,7 @@ func inspectInfoheaderV5(ctx *ctx_type, d []byte) error {
 	}
 
 	reserved := getDWORD(d[120:124])
-	ctx.pfxPrintf(120, "Reserved: %v\n", reserved)
+	ctx.pfxPrintf(120, "Reserved", "%v\n", reserved)
 
 	return nil
 }
@@ -616,7 +620,7 @@ func readInfoheader(ctx *ctx_type) error {
 	// Read the "biSize" field, which tells us the BMP version.
 	ctx.infoHeaderSize = getDWORD(ctx.data[ctx.pos : ctx.pos+4])
 	startLine(ctx, 0)
-	ctx.printf("Info Header Size: %v", ctx.infoHeaderSize)
+	ctx.printf("Info header size: %v", ctx.infoHeaderSize)
 
 	var vi versionInfo_type
 	var knownVersion bool
