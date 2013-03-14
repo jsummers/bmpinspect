@@ -16,22 +16,14 @@ const (
 	bI_RLE8      = 1
 	bI_RLE4      = 2
 	bI_BITFIELDS = 3
+	bI_HUFFMAN1D = 3
 	bI_JPEG      = 4
+	bI_RLE24     = 4
 	bI_PNG       = 5
 	// Some sources say 4, but 6 is confirmed by the Windows CE SDK.
 	bI_ALPHABITFIELDS = 6
 	bI_SRCPREROTATE   = 0x8000 // Unconfirmed.
 )
-
-var cmprNames = map[uint32]string{
-	bI_RGB:            "BI_RGB (uncompressed)",
-	bI_RLE8:           "BI_RLE8",
-	bI_RLE4:           "BI_RLE4",
-	bI_BITFIELDS:      "BI_BITFIELDS (uncompressed)",
-	bI_JPEG:           "BI_JPEG",
-	bI_PNG:            "BI_PNG",
-	bI_ALPHABITFIELDS: "BI_ALPHABITFIELDS (uncompressed)",
-}
 
 const (
 	lCS_CALIBRATED_RGB      = 0
@@ -68,7 +60,7 @@ type versionInfo_type struct {
 // Information about the different BMP versions, keyed off of the number of
 // bytes in the InfoHeader.
 var versionInfo = map[uint32]versionInfo_type{
-	12:  {"os2", "bc", "OS/2-style", inspectInfoheaderOS2},
+	12:  {"os2", "bc", "OS/2 1.0", inspectInfoheaderOS2},
 	40:  {"3", "bi", "version 3", inspectInfoheaderV3},
 	52:  {"", "", "BITMAPV2INFOHEADER", nil},
 	56:  {"", "", "BITMAPV3INFOHEADER", nil},
@@ -88,12 +80,15 @@ type ctx_type struct {
 	bmpVerID string // Version name used by bmpinspect: "os2", "3", "4", "5"
 	bitCount int
 
-	imgWidth       int
-	imgHeight      int
-	bfOffBits      uint32
-	infoHeaderSize uint32 // bcSize, biSize, etc.
-	sizeImage      uint32 // The biSizeImage field; 0 if not available
-	compression    uint32 // The biCompression field
+	imgWidth        int
+	imgHeight       int
+	bfOffBits       uint32
+	infoHeaderSize  uint32 // bcSize, biSize, etc.
+	sizeImage       uint32 // The biSizeImage field; 0 if not available
+	compressionCode uint32 // The biCompression field
+
+	// "none", "rle4", "rle8", "jpeg", "png", "huffman1d", "rle24", "unknown"
+	compressionType string
 
 	palNumEntries    int
 	palBytesPerEntry int
@@ -148,11 +143,14 @@ func translateFieldName(ctx *ctx_type, origFieldName string) string {
 
 	if ctx.bmpVerID == "os2V2" {
 		switch origFieldName {
+		// OS/2 2.0 images have a separate "Units" field, so it would be wrong
+		// to label these fields as "per meter".
 		case "XPelsPerMeter":
 			newFieldName = "XResolution"
 		case "YPelsPerMeter":
 			newFieldName = "YResolution"
 		}
+		return newFieldName;
 	}
 
 	return ctx.fieldNamePrefix + newFieldName
@@ -267,9 +265,35 @@ func printDotsPerMeter(ctx *ctx_type, n int32) {
 	ctx.print("\n")
 }
 
-func inspectInfoheaderV3(ctx *ctx_type, d []byte) error {
-	var ok bool
+// Based on the compressionCode and BMP version, return a description of the
+// compressionCode, and the compression algorithm.
+func getCompressionCodeInfo(ctx *ctx_type) (string, string) {
+	switch ctx.compressionCode {
+	case bI_RGB:
+		return "BI_RGB (uncompressed)", "none"
+	case bI_RLE8:
+		return "BI_RLE8", "rle8"
+	case bI_RLE4:
+		return "BI_RLE4", "rle4"
+	case 3:
+		if ctx.bmpVerID == "os2V2" {
+			return "Huffman 1D", "huffman1d"
+		}
+		return "BI_BITFIELDS (uncompressed)", "none"
+	case 4:
+		if ctx.bmpVerID == "os2V2" {
+			return "RLE24", "rle24"
+		}
+		return "BI_JPEG", "jpeg"
+	case bI_PNG:
+		return "BI_PNG", "png"
+	case bI_ALPHABITFIELDS:
+		return "BI_ALPHABITFIELDS (uncompressed)", "none"
+	}
+	return "(unrecognized)", "unknown"
+}
 
+func inspectInfoheaderV3(ctx *ctx_type, d []byte) error {
 	biWidth := getLONG(d[4:8])
 	ctx.pfxPrintf(4, "Width", "%v\n", biWidth)
 	ctx.imgWidth = int(biWidth)
@@ -303,34 +327,34 @@ func inspectInfoheaderV3(ctx *ctx_type, d []byte) error {
 	ctx.pfxPrintf(14, "BitCount", "%v\n", biBitCount)
 	ctx.bitCount = int(biBitCount)
 
-	ctx.compression = getDWORD(d[16:20])
+	ctx.compressionCode = getDWORD(d[16:20])
 
 	if ctx.infoHeaderSize == 40 &&
-		((ctx.compression == 3 && ctx.bitCount == 1) || (ctx.compression == 4 && ctx.bitCount == 24)) {
+		((ctx.compressionCode == 3 && ctx.bitCount == 1) || (ctx.compressionCode == 4 && ctx.bitCount == 24)) {
 		ctx.print("Note: Compression not valid for BMP v3. Assuming this is an OS/2 v2 BMP\n")
 		ctx.bmpVerID = "os2V2"
 	}
 
-	ctx.pfxPrintf(16, "Compression", "%v", ctx.compression)
-	var cmprName string
-	cmprName, ok = cmprNames[ctx.compression]
-	if !ok {
-		cmprName = "(unrecognized)"
-	}
-	ctx.printf(" = %v\n", cmprName)
-	if ctx.compression != bI_RGB && ctx.compression != bI_BITFIELDS &&
-		ctx.compression != bI_ALPHABITFIELDS {
-		ctx.isCompressed = true
+	var compressionCodeDescr string
+	compressionCodeDescr, ctx.compressionType = getCompressionCodeInfo(ctx)
+
+	ctx.pfxPrintf(16, "Compression", "%v", ctx.compressionCode)
+
+	ctx.printf(" = %v\n", compressionCodeDescr)
+
+	ctx.isCompressed = ctx.compressionType != "none"
+
+	if ctx.isCompressed && ctx.compressionType != "unknown" {
 		if ctx.topDown {
 			ctx.print("Warning: Compressed images may not be top-down\n")
 			ctx.printPixels = false
 		}
 	}
 
-	if ctx.compression == bI_BITFIELDS && ctx.bmpVerID == "3" {
+	if ctx.compressionCode == bI_BITFIELDS && ctx.bmpVerID == "3" {
 		ctx.hasBitfieldsSegment = true
 		ctx.bitfieldsSegmentSize = 12
-	} else if ctx.compression == bI_ALPHABITFIELDS && ctx.bmpVerID == "3" {
+	} else if ctx.compressionCode == bI_ALPHABITFIELDS && ctx.bmpVerID == "3" {
 		ctx.hasBitfieldsSegment = true
 		ctx.bitfieldsSegmentSize = 16
 	}
@@ -605,7 +629,7 @@ func checkBitCount(ctx *ctx_type) error {
 	switch ctx.bitCount {
 	case 0:
 		if (ctx.bmpVerID == "4" || ctx.bmpVerID == "5") &&
-			(ctx.compression == bI_JPEG || ctx.compression == bI_PNG) {
+			(ctx.compressionCode == bI_JPEG || ctx.compressionCode == bI_PNG) {
 			ok = true
 		}
 	case 1, 4, 8, 24:
@@ -886,10 +910,10 @@ func printRLECompressedPixels(ctx *ctx_type, d []byte) {
 	if ctx.bitCount != 4 && ctx.bitCount != 8 {
 		return
 	}
-	if ctx.bitCount == 4 && ctx.compression != bI_RLE4 {
+	if ctx.bitCount == 4 && ctx.compressionCode != bI_RLE4 {
 		return
 	}
-	if ctx.bitCount == 8 && ctx.compression != bI_RLE8 {
+	if ctx.bitCount == 8 && ctx.compressionCode != bI_RLE8 {
 		return
 	}
 
@@ -927,7 +951,7 @@ func printRLECompressedPixels(ctx *ctx_type, d []byte) {
 		rlectx.bytesInThisRow += 2
 
 		if unc_pixels_left > 0 {
-			if ctx.compression == bI_RLE4 {
+			if ctx.compressionCode == bI_RLE4 {
 				// The two bytes we read store up to 4 uncompressed pixels.
 				printRLE4Pixel(ctx, rlectx, b1>>4)
 				rlectx.xpos++
@@ -993,7 +1017,7 @@ func printRLECompressedPixels(ctx *ctx_type, d []byte) {
 				unc_pixels_left = int(b2)
 			}
 		} else { // Compressed pixels
-			if ctx.compression == bI_RLE4 {
+			if ctx.compressionCode == bI_RLE4 {
 				var n1 byte = (b2 & 0xf0) >> 4
 				var n2 byte = b2 & 0x0f
 				if b1 == 1 {
@@ -1083,12 +1107,11 @@ func inspectBits(ctx *ctx_type, d []byte) error {
 	}
 
 	if ctx.printPixels {
-		if ctx.isCompressed {
-			if ctx.compression == bI_RLE4 || ctx.compression == bI_RLE8 {
-				printRLECompressedPixels(ctx, d)
-			}
-		} else {
+		switch(ctx.compressionType) {
+		case "none":
 			printUncompressedPixels(ctx, d)
+		case "rle8", "rle4":
+			printRLECompressedPixels(ctx, d)
 		}
 	}
 

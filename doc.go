@@ -100,7 +100,9 @@ there's no need to separate them with spaces.
 images are primarily for use with printers, and one would not expect to find
 an actual BMP file with an embedded JPEG or PNG image.
 
-* Does not support some rare types of BMPs (with 52-, 56, or 64-byte headers).
+* Limited support for OS/2 2.0 BMPs.
+
+* Does not support some rare types of BMPs (with 52- or 56-byte headers).
 
 * Does not support Windows Mobile-style compression setting "BI_SRCPREROTATE".
 */
