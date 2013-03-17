@@ -11,6 +11,15 @@ import "os"
 import "io/ioutil"
 import "encoding/binary"
 
+var fileTypeNames = map[string]string{
+	"BA": "Bitmap Array",
+	"BM": "Bitmap",
+	"CI": "Color Icon",
+	"CP": "Color Pointer",
+	"IC": "Icon",
+	"PT": "Pointer",
+}
+
 const (
 	bI_RGB       = 0
 	bI_RLE8      = 1
@@ -77,6 +86,7 @@ type ctx_type struct {
 
 	printPixels bool
 
+	fileType string // Usually "BM"
 	bmpVerID string // Version name used by bmpinspect: "os2", "3", "4", "5"
 	bitCount int
 
@@ -150,7 +160,7 @@ func translateFieldName(ctx *ctx_type, origFieldName string) string {
 		case "YPelsPerMeter":
 			newFieldName = "YResolution"
 		}
-		return newFieldName;
+		return newFieldName
 	}
 
 	return ctx.fieldNamePrefix + newFieldName
@@ -197,9 +207,17 @@ func inspectFileheader(ctx *ctx_type, d []byte) error {
 	ctx.print("----- FILEHEADER -----\n")
 
 	startLine(ctx, 0)
-	ctx.printf("bfType: 0x%02x 0x%02x (%+q)\n", d[0], d[1], d[0:2])
-	if d[0] != 0x42 || d[1] != 0x4d {
+	ctx.fileType = string(d[0:2])
+	ctx.printf("bfType: 0x%02x 0x%02x (%+q)", d[0], d[1], ctx.fileType)
+
+	fileTypeName := fileTypeNames[ctx.fileType]
+	if fileTypeName == "" {
+		ctx.printf("\n")
 		return errors.New("Not a BMP file")
+	}
+	ctx.printf(" = %s\n", fileTypeName)
+	if ctx.fileType != "BM" {
+		return errors.New("File type not supported")
 	}
 
 	bfSize := getDWORD(d[2:6])
@@ -1107,7 +1125,7 @@ func inspectBits(ctx *ctx_type, d []byte) error {
 	}
 
 	if ctx.printPixels {
-		switch(ctx.compressionType) {
+		switch ctx.compressionType {
 		case "none":
 			printUncompressedPixels(ctx, d)
 		case "rle8", "rle4":
