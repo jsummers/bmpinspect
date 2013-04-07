@@ -70,7 +70,9 @@ type versionInfo_type struct {
 // bytes in the InfoHeader.
 var versionInfo = map[uint32]versionInfo_type{
 	12:  {"os2", "bc", "OS/2 1.0", inspectInfoheaderOS2},
+	16:  {"os2V2", "", "OS/2 2.0", inspectInfoheaderOS2V2},
 	40:  {"3", "bi", "version 3", inspectInfoheaderV3},
+	48:  {"os2V2", "", "OS/2 2.0", inspectInfoheaderOS2V2},
 	52:  {"", "", "BITMAPV2INFOHEADER", nil},
 	56:  {"", "", "BITMAPV3INFOHEADER", nil},
 	64:  {"os2V2", "", "OS/2 2.0", inspectInfoheaderOS2V2},
@@ -311,7 +313,14 @@ func getCompressionCodeInfo(ctx *ctx_type) (string, string) {
 	return "(unrecognized)", "unknown"
 }
 
+// len(d) is assumed to be at least 16.
 func inspectInfoheaderV3(ctx *ctx_type, d []byte) error {
+	var biXPelsPerMeter int32
+	var biYPelsPerMeter int32
+	var compressionCodeDescr string = "none"
+	var biClrUsed uint32
+	var biClrImportant uint32
+
 	biWidth := getLONG(d[4:8])
 	ctx.pfxPrintf(4, "Width", "%v\n", biWidth)
 	ctx.imgWidth = int(biWidth)
@@ -345,6 +354,9 @@ func inspectInfoheaderV3(ctx *ctx_type, d []byte) error {
 	ctx.pfxPrintf(14, "BitCount", "%v\n", biBitCount)
 	ctx.bitCount = int(biBitCount)
 
+	if len(d) < 20 {
+		goto done
+	}
 	ctx.compressionCode = getDWORD(d[16:20])
 
 	if ctx.infoHeaderSize == 40 &&
@@ -353,7 +365,6 @@ func inspectInfoheaderV3(ctx *ctx_type, d []byte) error {
 		ctx.bmpVerID = "os2V2"
 	}
 
-	var compressionCodeDescr string
 	compressionCodeDescr, ctx.compressionType = getCompressionCodeInfo(ctx)
 
 	ctx.pfxPrintf(16, "Compression", "%v", ctx.compressionCode)
@@ -377,30 +388,46 @@ func inspectInfoheaderV3(ctx *ctx_type, d []byte) error {
 		ctx.bitfieldsSegmentSize = 16
 	}
 
+	if len(d) < 24 {
+		goto done
+	}
 	ctx.sizeImage = getDWORD(d[20:24])
 	ctx.pfxPrintf(20, "SizeImage", "%v\n", ctx.sizeImage)
 	if ctx.sizeImage == 0 && ctx.isCompressed {
 		ctx.print("Warning: SizeImage is required for compressed images\n")
 	}
 
-	biXPelsPerMeter := getLONG(d[24:28])
+	if len(d) < 28 {
+		goto done
+	}
+	biXPelsPerMeter = getLONG(d[24:28])
 	ctx.pfxPrintf(24, "XPelsPerMeter", "")
 	printDotsPerMeter(ctx, biXPelsPerMeter)
 
-	biYPelsPerMeter := getLONG(d[28:32])
+	if len(d) < 32 {
+		goto done
+	}
+	biYPelsPerMeter = getLONG(d[28:32])
 	ctx.pfxPrintf(28, "YPelsPerMeter", "")
 	printDotsPerMeter(ctx, biYPelsPerMeter)
 
-	biClrUsed := getDWORD(d[32:36])
+	if len(d) < 36 {
+		goto done
+	}
+	biClrUsed = getDWORD(d[32:36])
 	ctx.pfxPrintf(32, "ClrUsed", "%v\n", biClrUsed)
 
-	biClrImportant := getDWORD(d[36:40])
+	if len(d) < 40 {
+		goto done
+	}
+	biClrImportant = getDWORD(d[36:40])
 	ctx.pfxPrintf(36, "ClrImportant", "%v\n", biClrImportant)
 
 	if biClrUsed > 100000 {
 		return errors.New("Unreasonable color table size")
 	}
 
+done:
 	ctx.palBytesPerEntry = 4
 
 	if biBitCount > 0 && biBitCount <= 8 {
@@ -449,27 +476,51 @@ func inspectInfoheaderOS2V2(ctx *ctx_type, d []byte) error {
 	var tmpui16 uint16
 	var tmpui32 uint32
 
-	err = inspectInfoheaderV3(ctx, d[0:40])
+	err = inspectInfoheaderV3(ctx, d[0:])
 	if err != nil {
 		return err
 	}
 
+	if len(d) < 42 {
+		return nil
+	}
 	units := getWORD(d[40:42])
 	ctx.pfxPrintf(40, "Units", "%d\n", units)
 
+	if len(d) < 44 {
+		return nil
+	}
 	tmpui16 = getWORD(d[42:44])
 	ctx.pfxPrintf(42, "Reserved", "%d\n", tmpui16)
+	if len(d) < 46 {
+		return nil
+	}
 	tmpui16 = getWORD(d[44:46])
 	ctx.pfxPrintf(44, "Recording", "%d\n", tmpui16)
+	if len(d) < 48 {
+		return nil
+	}
 	tmpui16 = getWORD(d[46:48])
 	ctx.pfxPrintf(46, "Rendering", "%d\n", tmpui16)
 
+	if len(d) < 52 {
+		return nil
+	}
 	tmpui32 = getDWORD(d[48:52])
 	ctx.pfxPrintf(48, "Size1", "%d\n", tmpui32)
+	if len(d) < 56 {
+		return nil
+	}
 	tmpui32 = getDWORD(d[52:56])
 	ctx.pfxPrintf(52, "Size2", "%d\n", tmpui32)
+	if len(d) < 60 {
+		return nil
+	}
 	tmpui32 = getDWORD(d[56:60])
 	ctx.pfxPrintf(56, "ColorEncoding", "%d\n", tmpui32)
+	if len(d) < 64 {
+		return nil
+	}
 	tmpui32 = getDWORD(d[60:64])
 	ctx.pfxPrintf(60, "Identifier", "%d\n", tmpui32)
 	return nil
