@@ -1274,6 +1274,7 @@ func main2(ctx *ctx_type) error {
 	ctx.fileName = os.Args[1]
 
 	ctx.printPixels = true
+	ctx.compressionType = "none" // default
 
 	// Read the whole file into a slice of bytes.
 	// TODO: It would be better to read the file in a streaming manner.
