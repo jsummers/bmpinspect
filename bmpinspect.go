@@ -1,5 +1,5 @@
 // ◄◄◄ bmpinspect ►►►
-// 
+//
 // A program to inspect the contents of a Windows BMP file.
 // Copyright (c) 2012 Jason Summers
 
@@ -354,80 +354,74 @@ func inspectInfoheaderV3(ctx *ctx_type, d []byte) error {
 	ctx.pfxPrintf(14, "BitCount", "%v\n", biBitCount)
 	ctx.bitCount = int(biBitCount)
 
-	if len(d) < 20 {
-		goto done
-	}
-	ctx.compressionCode = getDWORD(d[16:20])
+	if len(d) >= 20 {
+		ctx.compressionCode = getDWORD(d[16:20])
 
-	if ctx.infoHeaderSize == 40 &&
-		((ctx.compressionCode == 3 && ctx.bitCount == 1) || (ctx.compressionCode == 4 && ctx.bitCount == 24)) {
-		ctx.print("Note: Compression not valid for BMP v3. Assuming this is an OS/2 v2 BMP\n")
-		ctx.bmpVerID = "os2V2"
-	}
+		if ctx.infoHeaderSize == 40 &&
+			((ctx.compressionCode == 3 && ctx.bitCount == 1) || (ctx.compressionCode == 4 && ctx.bitCount == 24)) {
+			ctx.print("Note: Compression not valid for BMP v3. Assuming this is an OS/2 v2 BMP\n")
+			ctx.bmpVerID = "os2V2"
+		}
 
-	compressionCodeDescr, ctx.compressionType = getCompressionCodeInfo(ctx)
+		compressionCodeDescr, ctx.compressionType = getCompressionCodeInfo(ctx)
 
-	ctx.pfxPrintf(16, "Compression", "%v", ctx.compressionCode)
+		ctx.pfxPrintf(16, "Compression", "%v", ctx.compressionCode)
 
-	ctx.printf(" = %v\n", compressionCodeDescr)
+		ctx.printf(" = %v\n", compressionCodeDescr)
 
-	ctx.isCompressed = ctx.compressionType != "none"
+		ctx.isCompressed = ctx.compressionType != "none"
 
-	if ctx.isCompressed && ctx.compressionType != "unknown" {
-		if ctx.topDown {
-			ctx.print("Warning: Compressed images may not be top-down\n")
-			ctx.printPixels = false
+		if ctx.isCompressed && ctx.compressionType != "unknown" {
+			if ctx.topDown {
+				ctx.print("Warning: Compressed images may not be top-down\n")
+				ctx.printPixels = false
+			}
+		}
+
+		if ctx.compressionCode == bI_BITFIELDS && ctx.bmpVerID == "3" {
+			ctx.hasBitfieldsSegment = true
+			ctx.bitfieldsSegmentSize = 12
+		} else if ctx.compressionCode == bI_ALPHABITFIELDS && ctx.bmpVerID == "3" {
+			ctx.hasBitfieldsSegment = true
+			ctx.bitfieldsSegmentSize = 16
 		}
 	}
 
-	if ctx.compressionCode == bI_BITFIELDS && ctx.bmpVerID == "3" {
-		ctx.hasBitfieldsSegment = true
-		ctx.bitfieldsSegmentSize = 12
-	} else if ctx.compressionCode == bI_ALPHABITFIELDS && ctx.bmpVerID == "3" {
-		ctx.hasBitfieldsSegment = true
-		ctx.bitfieldsSegmentSize = 16
+	if len(d) >= 24 {
+		ctx.sizeImage = getDWORD(d[20:24])
+		ctx.pfxPrintf(20, "SizeImage", "%v\n", ctx.sizeImage)
 	}
 
-	if len(d) < 24 {
-		goto done
-	}
-	ctx.sizeImage = getDWORD(d[20:24])
-	ctx.pfxPrintf(20, "SizeImage", "%v\n", ctx.sizeImage)
 	if ctx.sizeImage == 0 && ctx.isCompressed {
 		ctx.print("Warning: SizeImage is required for compressed images\n")
 	}
 
-	if len(d) < 28 {
-		goto done
-	}
-	biXPelsPerMeter = getLONG(d[24:28])
-	ctx.pfxPrintf(24, "XPelsPerMeter", "")
-	printDotsPerMeter(ctx, biXPelsPerMeter)
-
-	if len(d) < 32 {
-		goto done
-	}
-	biYPelsPerMeter = getLONG(d[28:32])
-	ctx.pfxPrintf(28, "YPelsPerMeter", "")
-	printDotsPerMeter(ctx, biYPelsPerMeter)
-
-	if len(d) < 36 {
-		goto done
-	}
-	biClrUsed = getDWORD(d[32:36])
-	ctx.pfxPrintf(32, "ClrUsed", "%v\n", biClrUsed)
-
-	if len(d) < 40 {
-		goto done
-	}
-	biClrImportant = getDWORD(d[36:40])
-	ctx.pfxPrintf(36, "ClrImportant", "%v\n", biClrImportant)
-
-	if biClrUsed > 100000 {
-		return errors.New("Unreasonable color table size")
+	if len(d) >= 28 {
+		biXPelsPerMeter = getLONG(d[24:28])
+		ctx.pfxPrintf(24, "XPelsPerMeter", "")
+		printDotsPerMeter(ctx, biXPelsPerMeter)
 	}
 
-done:
+	if len(d) >= 32 {
+		biYPelsPerMeter = getLONG(d[28:32])
+		ctx.pfxPrintf(28, "YPelsPerMeter", "")
+		printDotsPerMeter(ctx, biYPelsPerMeter)
+	}
+
+	if len(d) >= 36 {
+		biClrUsed = getDWORD(d[32:36])
+		ctx.pfxPrintf(32, "ClrUsed", "%v\n", biClrUsed)
+
+		if biClrUsed > 100000 {
+			return errors.New("Unreasonable color table size")
+		}
+	}
+
+	if len(d) >= 40 {
+		biClrImportant = getDWORD(d[36:40])
+		ctx.pfxPrintf(36, "ClrImportant", "%v\n", biClrImportant)
+	}
+
 	ctx.palBytesPerEntry = 4
 
 	if biBitCount > 0 && biBitCount <= 8 {
