@@ -70,9 +70,7 @@ type versionInfo_type struct {
 // bytes in the InfoHeader.
 var versionInfo = map[uint32]versionInfo_type{
 	12:  {"os2", "bc", "OS/2 1.0", inspectInfoheaderOS2},
-	16:  {"os2V2", "", "OS/2 2.0", inspectInfoheaderOS2V2},
 	40:  {"3", "bi", "version 3", inspectInfoheaderV3},
-	48:  {"os2V2", "", "OS/2 2.0", inspectInfoheaderOS2V2},
 	52:  {"", "", "BITMAPV2INFOHEADER", nil},
 	56:  {"", "", "BITMAPV3INFOHEADER", nil},
 	64:  {"os2V2", "", "OS/2 2.0", inspectInfoheaderOS2V2},
@@ -712,6 +710,19 @@ func checkBitCount(ctx *ctx_type) error {
 	return nil
 }
 
+func getVersionInfo(hdrSize uint32) (versionInfo_type, bool) {
+	var vi versionInfo_type
+	var ok bool
+
+	// Allow OS/2v2 BMPs to have less than a full-sized header.
+	// (I don't know what to do if the header size is 52 or 56.)
+	if hdrSize >= 16 && hdrSize < 64 && hdrSize != 40 && hdrSize != 52 && hdrSize != 56 {
+		hdrSize = 64
+	}
+	vi, ok = versionInfo[hdrSize]
+	return vi, ok
+}
+
 func readInfoheader(ctx *ctx_type) error {
 	var err error
 
@@ -729,7 +740,7 @@ func readInfoheader(ctx *ctx_type) error {
 
 	var vi versionInfo_type
 	var knownVersion bool
-	vi, knownVersion = versionInfo[ctx.infoHeaderSize]
+	vi, knownVersion = getVersionInfo(ctx.infoHeaderSize)
 	if knownVersion {
 		ctx.printf(" (%s)", vi.name)
 	}
