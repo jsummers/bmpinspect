@@ -223,7 +223,10 @@ func inspectFileheader(ctx *ctx_type, d []byte) error {
 	bfSize := getDWORD(d[2:6])
 	startLine(ctx, 2)
 	ctx.printf("bfSize: %v\n", bfSize)
-	if int64(bfSize) != ctx.fileSize {
+	// The Size field is usually is set to the file size. But in OS/2 BMPs
+	// it can be set to the fileHeader size + infoHeader size, so don't warn
+	// about that.
+	if (int64(bfSize) != ctx.fileSize) && (bfSize != 14+ctx.infoHeaderSize) {
 		ctx.printf("Warning: Reported file size (%v) does not equal actual file size (%v)\n",
 			bfSize, ctx.fileSize)
 	}
@@ -733,8 +736,7 @@ func readInfoheader(ctx *ctx_type) error {
 	startLine(ctx, 0)
 	ctx.print("----- INFOHEADER -----\n")
 
-	// Read the "biSize" field, which tells us the BMP version.
-	ctx.infoHeaderSize = getDWORD(ctx.data[ctx.pos : ctx.pos+4])
+	// infoHeaderSize has already been read.
 	startLine(ctx, 0)
 	ctx.printf("Info header size: %v", ctx.infoHeaderSize)
 
@@ -1230,9 +1232,12 @@ func inspectLinkedProfile(ctx *ctx_type, d []byte) {
 func readBmp(ctx *ctx_type) error {
 	var err error
 
-	if ctx.fileSize-ctx.pos < 14 {
+	if ctx.fileSize-ctx.pos < 18 {
 		return errors.New("File is too small to be a BMP")
 	}
+
+	// First read the "biSize" field, which tells us the BMP version.
+	ctx.infoHeaderSize = getDWORD(ctx.data[ctx.pos+14 : ctx.pos+18])
 
 	err = inspectFileheader(ctx, ctx.data[ctx.pos:ctx.pos+14])
 	if err != nil {
