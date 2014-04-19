@@ -60,22 +60,20 @@ var intentNames = map[uint32]string{
 }
 
 type versionInfo_type struct {
-	id                    string
 	prefix                string
-	name                  string
 	inspectInfoheaderFunc func(ctx *ctx_type, d []byte) error
 }
 
-// Information about the different BMP versions, keyed off of the number of
-// bytes in the InfoHeader.
-var versionInfo = map[uint32]versionInfo_type{
-	12:  {"os2", "bc", "OS/2 1.0", inspectInfoheaderOS2},
-	40:  {"3", "bi", "version 3", inspectInfoheaderV3},
-	52:  {"", "", "BITMAPV2INFOHEADER", nil},
-	56:  {"", "", "BITMAPV3INFOHEADER", nil},
-	64:  {"os2V2", "", "OS/2 2.0", inspectInfoheaderOS2V2},
-	108: {"4", "bV4", "version 4", inspectInfoheaderV4},
-	124: {"5", "bV5", "version 5", inspectInfoheaderV5},
+// Information about the different BMP versions.
+var versionInfo = map[string]versionInfo_type{
+	"os2v1": {"bc", inspectInfoheaderOS2},
+	"os2v2": {"", inspectInfoheaderOS2V2},
+	"winv2": {"bc", inspectInfoheaderOS2},
+	"winv3": {"bi", inspectInfoheaderV3},
+	"52":    {"", nil},
+	"56":    {"", nil},
+	"winv4": {"bV4", inspectInfoheaderV4},
+	"winv5": {"bV5", inspectInfoheaderV5},
 }
 
 var versionIDToName = map[string]string{
@@ -770,19 +768,6 @@ func checkBitCount(ctx *ctx_type) error {
 	return nil
 }
 
-func getVersionInfo(hdrSize uint32) (versionInfo_type, bool) {
-	var vi versionInfo_type
-	var ok bool
-
-	// Allow OS/2v2 BMPs to have less than a full-sized header.
-	// (I don't know what to do if the header size is 52 or 56.)
-	if hdrSize >= 16 && hdrSize < 64 && hdrSize != 40 && hdrSize != 52 && hdrSize != 56 {
-		hdrSize = 64
-	}
-	vi, ok = versionInfo[hdrSize]
-	return vi, ok
-}
-
 func readInfoheader(ctx *ctx_type) error {
 	var err error
 
@@ -795,15 +780,11 @@ func readInfoheader(ctx *ctx_type) error {
 
 	// infoHeaderSize has already been read.
 	startLine(ctx, 0)
-	ctx.printf("Info header size: %v", ctx.infoHeaderSize)
+	ctx.printf("Info header size: %v\n", ctx.infoHeaderSize)
 
 	var vi versionInfo_type
 	var knownVersion bool
-	vi, knownVersion = getVersionInfo(ctx.infoHeaderSize)
-	if knownVersion {
-		ctx.printf(" (%s)", vi.name)
-	}
-	ctx.print("\n")
+	vi, knownVersion = versionInfo[ctx.bmpVerID]
 
 	if ctx.fileSize-ctx.pos < int64(ctx.infoHeaderSize) {
 		return errors.New("Unexpected end of file")
