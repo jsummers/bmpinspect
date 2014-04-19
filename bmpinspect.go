@@ -78,6 +78,18 @@ var versionInfo = map[uint32]versionInfo_type{
 	124: {"5", "bV5", "version 5", inspectInfoheaderV5},
 }
 
+var versionIDToName = map[string]string{
+	"os2v1":   "OS/2 BMP v1",
+	"os2v2":   "OS/2 BMP v2",
+	"winv2":   "Windows BMP v2",
+	"winv3":   "Windows BMP v3",
+	"52":      "BITMAPV2INFOHEADER",
+	"56":      "BITMAPV3INFOHEADER",
+	"winv4":   "Windows BMP v4",
+	"winv5":   "Windows BMP v5",
+	"unknown": "Unknown",
+}
+
 type ctx_type struct {
 	fileName string
 	data     []byte
@@ -86,9 +98,10 @@ type ctx_type struct {
 
 	printPixels bool
 
-	fileType string // Usually "BM"
-	bmpVerID string // Version name used by bmpinspect: "os2", "3", "4", "5"
-	bitCount int
+	fileType  string // Usually "BM"
+	bmpVerID  string // Version name used by bmpinspect: "os2", "3", "4", "5"
+	bmpVerID2 string
+	bitCount  int
 
 	imgWidth        int
 	imgHeight       int
@@ -196,6 +209,53 @@ func getFloat2dot30(d []byte) float64 {
 	return float64(getDWORD(d)) / 1073741824.0
 }
 
+func detectVersion(ctx *ctx_type, d []byte) {
+	var infoHeaderSize uint32
+	var bitCount uint16
+	var compression uint32
+	var fsize uint32
+	var os2CmprFlag bool
+
+	if len(d) < 18 {
+		return
+	}
+	fsize = getDWORD(ctx.data[ctx.pos+2 : ctx.pos+6])
+	infoHeaderSize = getDWORD(ctx.data[ctx.pos+14 : ctx.pos+18])
+	if len(d) >= 30 {
+		bitCount = getWORD(ctx.data[ctx.pos+28 : ctx.pos+30])
+	}
+	if len(d) >= 34 {
+		compression = getDWORD(ctx.data[ctx.pos+30 : ctx.pos+34])
+	}
+
+	if (compression == 3 && bitCount == 1) || (compression == 4 && bitCount == 24) {
+		os2CmprFlag = true
+	}
+
+	if infoHeaderSize == 12 && fsize == 14+infoHeaderSize {
+		ctx.bmpVerID2 = "os2v1"
+	} else if infoHeaderSize == 12 {
+		ctx.bmpVerID2 = "winv2"
+	} else if (os2CmprFlag || fsize == 14+infoHeaderSize) &&
+		infoHeaderSize >= 16 && infoHeaderSize <= 64 {
+		ctx.bmpVerID2 = "os2v2"
+	} else if infoHeaderSize == 40 {
+		ctx.bmpVerID2 = "winv3"
+	} else if infoHeaderSize == 52 {
+		ctx.bmpVerID2 = "52"
+	} else if infoHeaderSize == 56 {
+		ctx.bmpVerID2 = "56"
+	} else if infoHeaderSize >= 16 && infoHeaderSize <= 64 {
+		ctx.bmpVerID2 = "os2v2"
+	} else if infoHeaderSize == 108 {
+		ctx.bmpVerID2 = "winv4"
+	} else if infoHeaderSize == 124 {
+		ctx.bmpVerID2 = "winv5"
+	} else {
+		ctx.bmpVerID2 = "unknown"
+	}
+}
+
 // Functions named "inspect*" are passed a slice to read from,
 // and do not modify ctx.pos.
 // Functions named "read*" read directly from ctx.data, and
@@ -219,6 +279,10 @@ func inspectFileheader(ctx *ctx_type, d []byte) error {
 	if ctx.fileType != "BM" {
 		return errors.New("File type not supported")
 	}
+
+	detectVersion(ctx, ctx.data)
+	startLine(ctx, 0)
+	ctx.printf("(Version detected: %s)\n", versionIDToName[ctx.bmpVerID2])
 
 	bfSize := getDWORD(d[2:6])
 	startLine(ctx, 2)
