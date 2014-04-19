@@ -98,10 +98,9 @@ type ctx_type struct {
 
 	printPixels bool
 
-	fileType  string // Usually "BM"
-	bmpVerID  string // Version name used by bmpinspect: "os2", "3", "4", "5"
-	bmpVerID2 string
-	bitCount  int
+	fileType string // Usually "BM"
+	bmpVerID string // Version name used by bmpinspect: ("os2v1", "winv3", etc.)
+	bitCount int
 
 	imgWidth        int
 	imgHeight       int
@@ -164,7 +163,7 @@ func startLine(ctx *ctx_type, offset int64) {
 func translateFieldName(ctx *ctx_type, origFieldName string) string {
 	newFieldName := origFieldName
 
-	if ctx.bmpVerID == "os2V2" {
+	if ctx.bmpVerID == "os2v1" || ctx.bmpVerID == "os2v2" {
 		switch origFieldName {
 		// OS/2 2.0 images have a separate "Units" field, so it would be wrong
 		// to label these fields as "per meter".
@@ -233,26 +232,26 @@ func detectVersion(ctx *ctx_type, d []byte) {
 	}
 
 	if infoHeaderSize == 12 && fsize == 14+infoHeaderSize {
-		ctx.bmpVerID2 = "os2v1"
+		ctx.bmpVerID = "os2v1"
 	} else if infoHeaderSize == 12 {
-		ctx.bmpVerID2 = "winv2"
+		ctx.bmpVerID = "winv2"
 	} else if (os2CmprFlag || fsize == 14+infoHeaderSize) &&
 		infoHeaderSize >= 16 && infoHeaderSize <= 64 {
-		ctx.bmpVerID2 = "os2v2"
+		ctx.bmpVerID = "os2v2"
 	} else if infoHeaderSize == 40 {
-		ctx.bmpVerID2 = "winv3"
+		ctx.bmpVerID = "winv3"
 	} else if infoHeaderSize == 52 {
-		ctx.bmpVerID2 = "52"
+		ctx.bmpVerID = "52"
 	} else if infoHeaderSize == 56 {
-		ctx.bmpVerID2 = "56"
+		ctx.bmpVerID = "56"
 	} else if infoHeaderSize >= 16 && infoHeaderSize <= 64 {
-		ctx.bmpVerID2 = "os2v2"
+		ctx.bmpVerID = "os2v2"
 	} else if infoHeaderSize == 108 {
-		ctx.bmpVerID2 = "winv4"
+		ctx.bmpVerID = "winv4"
 	} else if infoHeaderSize == 124 {
-		ctx.bmpVerID2 = "winv5"
+		ctx.bmpVerID = "winv5"
 	} else {
-		ctx.bmpVerID2 = "unknown"
+		ctx.bmpVerID = "unknown"
 	}
 }
 
@@ -282,7 +281,7 @@ func inspectFileheader(ctx *ctx_type, d []byte) error {
 
 	detectVersion(ctx, ctx.data)
 	startLine(ctx, 0)
-	ctx.printf("(Version detected: %s)\n", versionIDToName[ctx.bmpVerID2])
+	ctx.printf("(Version detected: %s)\n", versionIDToName[ctx.bmpVerID])
 
 	bfSize := getDWORD(d[2:6])
 	startLine(ctx, 2)
@@ -361,12 +360,12 @@ func getCompressionCodeInfo(ctx *ctx_type) (string, string) {
 	case bI_RLE4:
 		return "BI_RLE4", "rle4"
 	case 3:
-		if ctx.bmpVerID == "os2V2" {
+		if ctx.bmpVerID == "os2v2" {
 			return "Huffman 1D", "huffman1d"
 		}
 		return "BI_BITFIELDS (uncompressed)", "none"
 	case 4:
-		if ctx.bmpVerID == "os2V2" {
+		if ctx.bmpVerID == "os2v2" {
 			return "RLE24", "rle24"
 		}
 		return "BI_JPEG", "jpeg"
@@ -422,12 +421,6 @@ func inspectInfoheaderV3(ctx *ctx_type, d []byte) error {
 	if len(d) >= 20 {
 		ctx.compressionCode = getDWORD(d[16:20])
 
-		if ctx.infoHeaderSize == 40 &&
-			((ctx.compressionCode == 3 && ctx.bitCount == 1) || (ctx.compressionCode == 4 && ctx.bitCount == 24)) {
-			ctx.print("Note: Compression not valid for BMP v3. Assuming this is an OS/2 v2 BMP\n")
-			ctx.bmpVerID = "os2V2"
-		}
-
 		compressionCodeDescr, ctx.compressionType = getCompressionCodeInfo(ctx)
 
 		ctx.pfxPrintf(16, "Compression", "%v", ctx.compressionCode)
@@ -443,10 +436,10 @@ func inspectInfoheaderV3(ctx *ctx_type, d []byte) error {
 			}
 		}
 
-		if ctx.compressionCode == bI_BITFIELDS && ctx.bmpVerID == "3" {
+		if ctx.compressionCode == bI_BITFIELDS && ctx.bmpVerID == "winv3" {
 			ctx.hasBitfieldsSegment = true
 			ctx.bitfieldsSegmentSize = 12
-		} else if ctx.compressionCode == bI_ALPHABITFIELDS && ctx.bmpVerID == "3" {
+		} else if ctx.compressionCode == bI_ALPHABITFIELDS && ctx.bmpVerID == "winv3" {
 			ctx.hasBitfieldsSegment = true
 			ctx.bitfieldsSegmentSize = 16
 		}
@@ -516,11 +509,11 @@ func inspectCIEXYZTRIPLE(ctx *ctx_type, d []byte, offset int64) {
 }
 
 func csTypeIsValid(ctx *ctx_type, csType uint32) bool {
-	if ctx.bmpVerID == "4" {
+	if ctx.bmpVerID == "winv4" {
 		if csType == lCS_CALIBRATED_RGB {
 			return true
 		}
-	} else if ctx.bmpVerID == "5" {
+	} else if ctx.bmpVerID == "winv5" {
 		switch csType {
 		case lCS_CALIBRATED_RGB, lCS_sRGB, lCS_WINDOWS_COLOR_SPACE,
 			pROFILE_LINKED, pROFILE_EMBEDDED:
@@ -698,7 +691,7 @@ func inspectColorTable(ctx *ctx_type, d []byte) error {
 	startLine(ctx, 0)
 	ctx.printf("(Number of colors: %v)\n", ctx.palNumEntries)
 
-	if ctx.bmpVerID == "os2V2" {
+	if ctx.bmpVerID == "os2v2" {
 		bytesAvailableForPalette := int(ctx.bfOffBits) - (14 + int(ctx.infoHeaderSize))
 		if bytesAvailableForPalette == 3*ctx.palNumEntries {
 			// Some of the (very few) os2V2 sample files I've seen have this
@@ -756,18 +749,18 @@ func checkBitCount(ctx *ctx_type) error {
 
 	switch ctx.bitCount {
 	case 0:
-		if (ctx.bmpVerID == "4" || ctx.bmpVerID == "5") &&
+		if (ctx.bmpVerID == "winv4" || ctx.bmpVerID == "winv5") &&
 			(ctx.compressionCode == bI_JPEG || ctx.compressionCode == bI_PNG) {
 			ok = true
 		}
 	case 1, 4, 8, 24:
 		ok = true
 	case 2:
-		if ctx.bmpVerID == "3" {
+		if ctx.bmpVerID == "winv3" {
 			ok = true
 		}
 	case 16, 32:
-		if ctx.bmpVerID == "3" || ctx.bmpVerID == "4" || ctx.bmpVerID == "5" {
+		if ctx.bmpVerID == "winv3" || ctx.bmpVerID == "winv4" || ctx.bmpVerID == "winv5" {
 			ok = true
 		}
 	}
@@ -823,7 +816,6 @@ func readInfoheader(ctx *ctx_type) error {
 		return errors.New("Unsupported BMP version")
 	}
 
-	ctx.bmpVerID = vi.id
 	ctx.fieldNamePrefix = vi.prefix
 
 	err = vi.inspectInfoheaderFunc(ctx, ctx.data[ctx.pos:ctx.pos+int64(ctx.infoHeaderSize)])
