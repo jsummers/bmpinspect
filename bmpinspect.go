@@ -66,7 +66,7 @@ type versionInfo_type struct {
 
 // Information about the different BMP versions.
 var versionInfo = map[string]versionInfo_type{
-	"os2v1": {"bc", inspectInfoheaderOS2},
+	"os2v1": {"", inspectInfoheaderOS2},
 	"os2v2": {"", inspectInfoheaderOS2V2},
 	"winv2": {"bc", inspectInfoheaderOS2},
 	"winv3": {"bi", inspectInfoheaderV3},
@@ -163,6 +163,15 @@ func translateFieldName(ctx *ctx_type, origFieldName string) string {
 
 	if ctx.bmpVerID == "os2v1" || ctx.bmpVerID == "os2v2" {
 		switch origFieldName {
+		case "bfSize":
+			newFieldName = "cbSize"
+		case "bfReserved1":
+			newFieldName = "xHotspot"
+		case "bfReserved2":
+			newFieldName = "yHotspot"
+		case "bfOffBits":
+			newFieldName = "offBits"
+
 		// OS/2 2.0 images have a separate "Units" field, so it would be wrong
 		// to label these fields as "per meter".
 		case "XPelsPerMeter":
@@ -179,6 +188,12 @@ func translateFieldName(ctx *ctx_type, origFieldName string) string {
 // Start a new line, using the appropriate field name, with the "bi" (etc.) prefix.
 func (ctx *ctx_type) pfxPrintf(offset int64, fieldName string, format string, a ...interface{}) {
 	startLine(ctx, offset)
+	ctx.print(translateFieldName(ctx, fieldName) + ": ")
+	ctx.printf(format, a...)
+}
+
+func (ctx *ctx_type) pfxPrintfAbs(offset int64, fieldName string, format string, a ...interface{}) {
+	startLineAbsolute(ctx, offset)
 	ctx.print(translateFieldName(ctx, fieldName) + ": ")
 	ctx.printf(format, a...)
 }
@@ -263,9 +278,8 @@ func inspectFileheader(ctx *ctx_type, d []byte) error {
 	startLine(ctx, 0)
 	ctx.print("----- FILEHEADER -----\n")
 
-	startLine(ctx, 0)
 	ctx.fileType = string(d[0:2])
-	ctx.printf("bfType: 0x%02x 0x%02x (%+q)", d[0], d[1], ctx.fileType)
+	ctx.pfxPrintfAbs(0, "bfType", "0x%02x 0x%02x (%+q)", d[0], d[1], ctx.fileType)
 
 	fileTypeName := fileTypeNames[ctx.fileType]
 	if fileTypeName == "" {
@@ -282,8 +296,7 @@ func inspectFileheader(ctx *ctx_type, d []byte) error {
 	ctx.printf("(Version detected: %s)\n", versionIDToName[ctx.bmpVerID])
 
 	bfSize := getDWORD(d[2:6])
-	startLine(ctx, 2)
-	ctx.printf("bfSize: %v\n", bfSize)
+	ctx.pfxPrintfAbs(2, "bfSize", "%v\n", bfSize)
 	// The Size field is usually is set to the file size. But in OS/2 BMPs
 	// it can be set to the fileHeader size + infoHeader size, so don't warn
 	// about that.
@@ -293,16 +306,13 @@ func inspectFileheader(ctx *ctx_type, d []byte) error {
 	}
 
 	bfReserved1 := getWORD(d[6:8])
-	startLine(ctx, 6)
-	ctx.printf("bfReserved1: %v\n", bfReserved1)
+	ctx.pfxPrintfAbs(6, "bfReserved1", "%v\n", bfReserved1)
 
 	bfReserved2 := getWORD(d[8:10])
-	startLine(ctx, 8)
-	ctx.printf("bfReserved2: %v\n", bfReserved2)
+	ctx.pfxPrintfAbs(8, "bfReserved2", "%v\n", bfReserved2)
 
 	ctx.bfOffBits = getDWORD(d[10:14])
-	startLine(ctx, 10)
-	ctx.printf("bfOffBits: %v\n", ctx.bfOffBits)
+	ctx.pfxPrintfAbs(10, "bfOffBits", "%v\n", ctx.bfOffBits)
 
 	return nil
 }
