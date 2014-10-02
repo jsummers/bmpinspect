@@ -96,10 +96,11 @@ type ctx_type struct {
 
 	printPixels bool
 
-	fileType string // Usually "BM"
-	bmpVerID string // Version name used by bmpinspect: ("os2v1", "winv3", etc.)
-	bitCount int
+	fileType   string // Usually "BM"
+	bmpVerID   string // Version name used by bmpinspect: ("os2v1", "winv3", etc.)
+	bmpVerName string
 
+	bitCount        int
 	imgWidth        int
 	imgHeight       int
 	bfOffBits       uint32
@@ -253,6 +254,9 @@ func detectVersion(ctx *ctx_type, d []byte) {
 		ctx.bmpVerID = "os2v2"
 	} else if infoHeaderSize == 40 {
 		ctx.bmpVerID = "winv3"
+		if bitCount == 2 {
+			ctx.bmpVerName = "Windows CE BMP"
+		}
 	} else if infoHeaderSize == 52 {
 		ctx.bmpVerID = "52"
 	} else if infoHeaderSize == 56 {
@@ -265,6 +269,11 @@ func detectVersion(ctx *ctx_type, d []byte) {
 		ctx.bmpVerID = "winv5"
 	} else {
 		ctx.bmpVerID = "unknown"
+	}
+
+	// Set bmpVerName based on the ID, if it's not already set.
+	if ctx.bmpVerName == "" {
+		ctx.bmpVerName = versionIDToName[ctx.bmpVerID]
 	}
 }
 
@@ -293,7 +302,7 @@ func inspectFileheader(ctx *ctx_type, d []byte) error {
 
 	detectVersion(ctx, ctx.data)
 	startLine(ctx, 0)
-	ctx.printf("(Version detected: %s)\n", versionIDToName[ctx.bmpVerID])
+	ctx.printf("(Version detected: %s)\n", ctx.bmpVerName)
 
 	bfSize := getDWORD(d[2:6])
 	ctx.pfxPrintfAbs(2, "bfSize", "%v\n", bfSize)

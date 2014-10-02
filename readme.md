@@ -18,8 +18,8 @@ To download and install, run
 
     go get github.com/jsummers/bmpinspect
 
-The bmpinspect program should appear at PATH/bin/fpr, where PATH is the
-first path in your GOPATH environment variable.
+The bmpinspect program should appear at PATH/bin/bmpinspect, where PATH is
+the first path in your GOPATH environment variable.
 
 Copyright (c) 2012 Jason Summers
 
