@@ -70,8 +70,8 @@ var versionInfo = map[string]versionInfo_type{
 	"os2v2": {"", inspectInfoheaderOS2V2},
 	"winv2": {"bc", inspectInfoheaderOS2},
 	"winv3": {"bi", inspectInfoheaderV3},
-	"52":    {"", nil},
-	"56":    {"", nil},
+	"52":    {"bi", inspectInfoheaderV4},
+	"56":    {"bi", inspectInfoheaderV4},
 	"winv4": {"bV4", inspectInfoheaderV4},
 	"winv5": {"bV5", inspectInfoheaderV5},
 }
@@ -611,8 +611,14 @@ func inspectInfoheaderV4(ctx *ctx_type, d []byte) error {
 	ctx.pfxPrintf(44, "GreenMask", "%032b\n", greenMask)
 	blueMask := getDWORD(d[48:52])
 	ctx.pfxPrintf(48, "BlueMask", " %032b\n", blueMask)
+	if len(d) < 56 {
+		return nil
+	}
 	alphaMask := getDWORD(d[52:56])
 	ctx.pfxPrintf(52, "AlphaMask", "%032b\n", alphaMask)
+	if len(d) < 108 {
+		return nil
+	}
 
 	csType := getDWORD(d[56:60])
 	ctx.pfxPrintf(56, "CSType", "0x%x", csType)
@@ -777,7 +783,8 @@ func checkBitCount(ctx *ctx_type) error {
 			ok = true
 		}
 	case 16, 32:
-		if ctx.bmpVerID == "winv3" || ctx.bmpVerID == "winv4" || ctx.bmpVerID == "winv5" {
+		if ctx.bmpVerID == "winv3" || ctx.bmpVerID == "52" || ctx.bmpVerID == "56" ||
+			ctx.bmpVerID == "winv4" || ctx.bmpVerID == "winv5" {
 			ok = true
 		}
 	}
