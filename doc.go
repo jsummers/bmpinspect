@@ -1,6 +1,6 @@
 // ◄◄◄ bmpinspect/doc.go ►►►
 // 
-// Copyright (c) 2012 Jason Summers
+// Copyright (c) 2012–2015 Jason Summers
 
 /*
 bmpinspect is a command-line utility that displays the contents of a
@@ -52,7 +52,7 @@ fields.
 The BITFIELDS definitions used by 16- and 32-bit images are 32-bit
 little-endian integers. The samples can be in any order, but usually the
 highest-order bits are used for red, and the lowest for blue. Because it's
-little-endian, that means the blue bits appear first in the file.
+little-endian, the blue bits usually appear first in the file.
 
 The image data of a 16-bit image is interpreted as a sequence of 16-bit
 little-endian integers, each representing one pixel, and interpreted according
@@ -101,8 +101,6 @@ images are primarily for use with printers, and one would not expect to find
 an actual BMP file with an embedded JPEG or PNG image.
 
 * Limited support for OS/2 2.0 BMPs.
-
-* Does not support some rare types of BMPs (with 52- or 56-byte headers).
 
 * Does not support Windows Mobile-style compression setting "BI_SRCPREROTATE".
 */
