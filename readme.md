@@ -21,7 +21,7 @@ To download and install, run
 The bmpinspect program should appear at PATH/bin/bmpinspect, where PATH is
 the first path in your GOPATH environment variable.
 
-Copyright (c) 2012 Jason Summers
+Copyright (c) 2012-2018 Jason Summers
 
 -------------------------------------------------------------------------
 

@@ -1,6 +1,6 @@
 // ◄◄◄ bmpinspect/doc.go ►►►
 // 
-// Copyright (c) 2012–2015 Jason Summers
+// Copyright © 2012–2018 Jason Summers
 
 /*
 bmpinspect is a command-line utility that displays the contents of a

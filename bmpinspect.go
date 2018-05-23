@@ -1,7 +1,7 @@
 // ◄◄◄ bmpinspect ►►►
 //
 // A program to inspect the contents of a Windows BMP file.
-// Copyright (c) 2012 Jason Summers
+// Copyright © 2012–2018 Jason Summers
 
 package main
 
@@ -1027,6 +1027,10 @@ func checkRLEPosAndColor(ctx *ctx_type, rlectx *rlectx_type, n byte) {
 		rlectx.badPos_Y = rlectx.ypos
 	}
 
+	if ctx.compressionCode == bI_RLE24 {
+		return
+	}
+
 	if int(n) >= ctx.palNumEntries && !ctx.badColorFlag {
 		ctx.badColorIndex = int(n)
 		ctx.badColor_X = rlectx.xpos
@@ -1045,8 +1049,13 @@ func printRLE8Pixel(ctx *ctx_type, rlectx *rlectx_type, n byte) {
 	checkRLEPosAndColor(ctx, rlectx, n)
 }
 
+func printRLE24Pixel(ctx *ctx_type, rlectx *rlectx_type, clr []byte) {
+	ctx.printf("%02x%02x%02x", clr[2], clr[1], clr[0])
+	checkRLEPosAndColor(ctx, rlectx, 0)
+}
+
 func printRLECompressedPixels(ctx *ctx_type, d []byte) {
-	if ctx.bitCount != 4 && ctx.bitCount != 8 {
+	if ctx.bitCount != 4 && ctx.bitCount != 8 && ctx.bitCount != 24 {
 		return
 	}
 	if ctx.bitCount == 4 && ctx.compressionCode != bI_RLE4 {
@@ -1055,12 +1064,18 @@ func printRLECompressedPixels(ctx *ctx_type, d []byte) {
 	if ctx.bitCount == 8 && ctx.compressionCode != bI_RLE8 {
 		return
 	}
+	if ctx.bitCount == 24 && ctx.compressionCode != bI_RLE24 {
+		return
+	}
 
 	rlectx := new(rlectx_type)
 	var pos int = 0 // current position in d[]
 	var unc_pixels_left int = 0
 	var b1, b2 byte
 	var deltaFlag bool
+	var rle24pendingFlag bool // Is an RLE24 compression code pending?
+	var clr24bytes [4]byte    // Pending bytes, used with RLE24
+	var clr24bytes_used int = 0
 
 	rlectx.xpos = 0
 	// RLE-compressed BMPs are not allowed to be top-down.
@@ -1083,14 +1098,41 @@ func printRLECompressedPixels(ctx *ctx_type, d []byte) {
 			rlectx.rowHeaderPrinted = true
 		}
 
-		// Read bytes 2 at a time
+		// Read bytes 2 at a time.
+		// This strategy works pretty well for RLE4 and RLE8, but not as well
+		// for RLE24.
 		b1 = d[pos]
 		b2 = d[pos+1]
 		pos += 2
 		rlectx.bytesInThisRow += 2
 
 		if unc_pixels_left > 0 {
-			if ctx.compressionCode == bI_RLE4 {
+			if ctx.compressionCode == bI_RLE24 {
+				// Append these 2 bytes to our color buffer
+				clr24bytes[clr24bytes_used] = b1
+				clr24bytes_used++
+				clr24bytes[clr24bytes_used] = b2
+				clr24bytes_used++
+
+				if clr24bytes_used >= 3 {
+					// We've accumulated enough bytes for a pixel
+					printRLE24Pixel(ctx, rlectx, clr24bytes[0:3])
+					rlectx.xpos++
+					unc_pixels_left--
+					if unc_pixels_left > 0 {
+						ctx.printf(" ")
+					}
+					// If there was a leftover byte, move it to the beginning
+					if clr24bytes_used == 4 {
+						clr24bytes[0] = clr24bytes[3]
+					}
+					clr24bytes_used -= 3
+				}
+
+				if unc_pixels_left < 1 {
+					clr24bytes_used = 0 // Discard any padding byte
+				}
+			} else if ctx.compressionCode == bI_RLE4 {
 				// The two bytes we read store up to 4 uncompressed pixels.
 				printRLE4Pixel(ctx, rlectx, b1>>4)
 				rlectx.xpos++
@@ -1137,6 +1179,16 @@ func printRLECompressedPixels(ctx *ctx_type, d []byte) {
 				endRLERow(ctx, rlectx)
 			}
 			deltaFlag = false
+		} else if rle24pendingFlag { // the last 2 bytes of a 4-byte RLE code
+			clr24bytes[2] = b1
+			clr24bytes[3] = b2
+			printRLE24Pixel(ctx, rlectx, clr24bytes[1:4])
+			ctx.print("}")
+			rlectx.xpos += int(clr24bytes[0]) - 1
+			checkRLEPosAndColor(ctx, rlectx, 0)
+			rlectx.xpos++
+			rle24pendingFlag = false
+			clr24bytes_used = 0
 		} else if b1 == 0 {
 			if b2 == 0 {
 				ctx.print(" EOL")
@@ -1156,7 +1208,14 @@ func printRLECompressedPixels(ctx *ctx_type, d []byte) {
 				unc_pixels_left = int(b2)
 			}
 		} else { // Compressed pixels
-			if ctx.compressionCode == bI_RLE4 {
+			if ctx.compressionCode == bI_RLE24 {
+				ctx.printf(" %v{", b1)
+				checkRLEPosAndColor(ctx, rlectx, 0)
+				clr24bytes[0] = b1
+				clr24bytes[1] = b2
+				clr24bytes_used = 2
+				rle24pendingFlag = true
+			} else if ctx.compressionCode == bI_RLE4 {
 				var n1 byte = (b2 & 0xf0) >> 4
 				var n2 byte = b2 & 0x0f
 				if b1 == 1 {
@@ -1249,8 +1308,11 @@ func inspectBits(ctx *ctx_type, d []byte) error {
 		switch ctx.compressionType {
 		case "none":
 			printUncompressedPixels(ctx, d)
-		case "rle8", "rle4":
+		case "rle8", "rle4", "rle24":
 			printRLECompressedPixels(ctx, d)
+		default:
+			startLine(ctx, 0)
+			ctx.print("(Don't know how to decode this type of bitmap.)\n")
 		}
 	}
 
